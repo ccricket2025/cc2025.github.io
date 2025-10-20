@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Cricket Play - Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #3498db; /* Bright Blue */
+            --primary-dark-color: #2980b9;
+            --accent-color: #2ecc71; /* Emerald Green */
+            --background-color: #f4f6f8; /* Softer White */
+            --surface-color: #ffffff;
+            --text-primary-color: #34495e; /* Wet Asphalt */
+            --text-secondary-color: #95a5a6; /* Silver */
+            --divider-color: #e0e0e0;
+            --danger-color: #e74c3c; /* Alizarin Red */
+            --success-color: #27ae60;
+            --warning-color: #f39c12; /* Orange */
+        }
+        html { box-sizing: border-box; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-primary-color);
+            overscroll-behavior-y: contain;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            font-size: 15px;
+        }
+
+        /* --- Login Screen --- */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--primary-dark-color), var(--primary-color));
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        #login-box {
+            background-color: var(--surface-color);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 320px;
+            text-align: center;
+        }
+        #login-box h2 {
+            margin-top: 0;
+            color: var(--primary-dark-color);
+        }
+        #login-box .form-group input {
+            text-align: center;
+            font-size: 16px;
+        }
+
+        /* Screen Management & Transitions */
+        .screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s;
+            transform: translateX(100%);
+            background-color: var(--background-color);
+            visibility: hidden;
+            opacity: 0;
+        }
+        .screen.active {
+            transform: translateX(0);
+            z-index: 10;
+            visibility: visible;
+            opacity: 1;
+        }
+        .screen.inactive-left {
+            transform: translateX(-30%);
+            visibility: visible;
+            opacity: 0.5;
+        }
+
+        /* App Header (Toolbar) */
+        .app-header {
+            background: linear-gradient(135deg, var(--primary-dark-color), var(--primary-color));
+            color: white;
+            padding: 0 8px; display: flex; align-items: center;
+            height: 56px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            position: sticky; top: 0; z-index: 100; flex-shrink: 0;
+        }
+        .app-header .icon-button { background: none; border: none; color: white; padding: 12px; border-radius: 50%; cursor: pointer; display: flex; }
+        .app-header h1 { font-size: 19px; font-weight: 500; margin: 0; flex-grow: 1; text-align: center; }
+        .app-header h1:first-child { text-align: left; }
+
+        /* Content & Cards */
+        .content { padding: 16px; flex-grow: 1; overflow-y: auto; }
+        .card {
+            background-color: var(--surface-color);
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #eef2f5;
+            margin-bottom: 16px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* Forms & Buttons */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #7f8c8d; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid var(--divider-color); border-radius: 8px; font-size: 15px; background-color: #fafafa; }
+
+        .input-with-dropdown {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .input-with-dropdown input {
+            flex-grow: 1;
+        }
+        .input-with-dropdown .icon-button {
+            flex-shrink: 0;
+            background-color: var(--background-color);
+            color: var(--text-secondary-color);
+            padding: 8px;
+            height: 45px;
+            width: 45px;
+        }
+
+        .btn {
+            display: flex; justify-content: center; align-items: center;
+            width: 100%; padding: 12px; border: none; border-radius: 8px;
+            background: linear-gradient(45deg, var(--primary-color), var(--primary-dark-color));
+            color: white; font-size: 15px; font-weight: 500; cursor: pointer;
+            text-align: center; text-transform: uppercase;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            transition: all 0.2s ease;
+        }
+        .btn:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .btn.btn-secondary { background: linear-gradient(45deg, #bdc3c7, #95a5a6); }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+        .btn-group .btn { flex-grow: 1; min-width: 110px; }
+
+
+        /* Toggle Switch */
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { display: none; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent-color); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* Bottom Navigation */
+        .bottom-nav { display: flex; justify-content: space-around; background-color: var(--surface-color); box-shadow: 0 -2px 10px rgba(0,0,0,0.1); position: sticky; bottom: 0; width: 100%; z-index: 100; flex-shrink: 0; padding: 6px 0; border-top-left-radius: 16px; border-top-right-radius: 16px; }
+        .nav-item { cursor: pointer; text-align: center; flex-grow: 1; display: flex; flex-direction: column; align-items: center; color: var(--text-secondary-color); transition: color 0.2s; }
+        .nav-item .material-icons { font-size: 24px; }
+        .nav-item span { font-size: 12px; }
+        .nav-item.active { color: var(--primary-color); }
+
+        /* Floating Action Button */
+        .fab { position: fixed; bottom: 80px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(45deg, var(--accent-color), #27ae60); color: white; display: flex; justify-content: center; align-items: center; font-size: 28px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); cursor: pointer; z-index: 200; transition: transform 0.2s ease; }
+        .fab:active { transform: scale(0.95); }
+
+        /* Modal, Toast & Other UI */
+        .modal-overlay { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background-color: var(--surface-color); margin: auto; padding: 24px; border-radius: 12px; width: 90%; max-width: 400px; animation: slide-up 0.3s ease; }
+        @keyframes slide-up { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        #team-select-modal-list .list-item { padding: 12px; border-bottom: 1px solid var(--divider-color); cursor: pointer; transition: background-color 0.2s; }
+        #team-select-modal-list .list-item:hover { background-color: var(--background-color); }
+
+        .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.87); color: white; padding: 12px 24px; border-radius: 24px; z-index: 2000; opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease; font-size: 14px; }
+
+        /* Player & Stats Specific Styles */
+        .player-row { display: flex; align-items: center; padding: 12px 8px; border-bottom: 1px solid #f0f0f0; transition: background-color 0.2s; }
+        .player-row:last-child { border-bottom: none; }
+        .player-row:hover { background-color: #f8f9fa; }
+        .player-row span { flex-grow: 1; font-weight: 500; cursor: pointer; }
+        .icon-button { background: none; border: none; padding: 8px; border-radius: 50%; cursor: pointer; display: inline-flex; justify-content: center; align-items: center; }
+
+        .player-profile-header { text-align: center; padding: 24px; background: linear-gradient(to top, var(--primary-color), var(--primary-dark-color)); color: white; }
+        .player-profile-pic { width: 100px; height: 100px; border-radius: 50%; border: 4px solid white; background-color: #ccc; margin: 0 auto 8px auto; display: flex; justify-content: center; align-items: center; }
+        .player-stats-tabs { position: static; box-shadow: none; border-bottom: 1px solid var(--divider-color); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+        .stat-box { background-color: #fafafa; padding: 12px; border-radius: 6px; text-align: center; }
+        .stat-box .value { font-size: 19px; font-weight: 700; color: var(--primary-dark-color); }
+        .stat-box .label { font-size: 12px; color: #7f8c8d; }
+
+        /* Scorecard & Tournament Styles */
+        .scoreboard {
+            text-align: center; padding: 16px;
+            background: linear-gradient(135deg, var(--primary-dark-color), var(--primary-color));
+            border-radius: 12px;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .scoreboard h2 { margin: 0; font-size: 30px; font-weight: 700; }
+        .scoreboard p { margin: 4px 0 0; font-size: 14px; opacity: 0.9; }
+
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .score-table, .points-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px; min-width: 320px; }
+        .score-table th, .points-table th { padding: 10px 8px; text-align: left; background-color: #e9ecef; color: var(--text-primary-color); font-weight: 600; }
+        .score-table td, .points-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--divider-color); }
+        .score-table tbody tr:nth-child(even), .points-table tbody tr:nth-child(even) { background-color: #f8f9fa; }
+
+        .this-over { font-weight: 700; letter-spacing: 2px; }
+        #this-over-display { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; padding-top: 4px; }
+        .ball-event { display: inline-flex; justify-content: center; align-items: center; width: 28px; height: 28px; background-color: var(--primary-color); color: white; font-weight: 500; border-radius: 4px; font-size: 12px; }
+        .ball-event.wicket { background-color: var(--danger-color); }
+
+        .scoring-controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+        .scoring-controls .btn { background: #95a5a6; font-size: 14px; padding: 10px 5px; }
+        .scoring-controls .btn.active { background: var(--warning-color); }
+
+        .run-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; justify-items: center; }
+        .run-buttons .btn {
+            padding: 0;
+            font-size: 20px;
+            font-weight: 700;
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            flex-grow: 0;
+            min-width: unset;
+        }
+        .run-buttons .btn.btn-secondary { background: var(--text-secondary-color); }
+
+        /* Points Table Specific Overrides for better screen fit */
+        .points-table {
+            font-size: 13px; /* Make font smaller */
+            table-layout: fixed; /* Helps with column width control */
+            width: 100%;
+        }
+        .points-table th, .points-table td {
+            padding: 8px 3px; /* Reduce horizontal padding */
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .points-table td:first-child, .points-table th:first-child {
+            text-align: left;
+            width: 35%; /* Give more width to team name column */
+        }
+        .points-table input {
+            padding: 4px 2px;
+            font-size: 12px;
+            max-width: 40px; /* Make input boxes smaller */
+            width: 100%;
+            text-align: center;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+
+        #new-match-from-scorecard-btn { position: fixed; bottom: 20px; right: 20px; width: auto; padding: 12px 20px; z-index: 200; display: none; }
+        .match-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .match-row select { flex: 1; padding: 8px; border-radius: 8px; }
+        .match-row span { font-weight: 500; }
+        .add-btn { display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--primary-color); padding: 8px; border-radius: 8px; background-color: #ecf0f1; margin-top: 8px; }
+
+        .result-match-item {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--divider-color);
+        }
+        .result-match-item:last-child { border-bottom: none; }
+        .score-entry-row { display: flex; align-items: center; margin-bottom: 8px; gap: 12px; }
+        .score-entry-row .team-name { flex: 1; font-weight: 500; }
+        .score-entry-row .score-input { flex: 0 0 120px; text-align: right; padding: 8px; }
+        .summary-input { width: 100%; margin-top: 8px; padding: 8px; border-radius: 8px; border: 1px solid var(--divider-color); resize: vertical; min-height: 50px; font-size: 14px; }
+
+        #new-over-btn.alert { animation: pulse 1.5s infinite; background: linear-gradient(45deg, var(--warning-color), #f5b041); }
+        @keyframes pulse { 0% { transform: scale(1); box-shadow: 0 2px 4px rgba(0,0,0,0.15); } 50% { transform: scale(1.05); box-shadow: 0 4px 12px rgba(243, 156, 18, 0.4); } 100% { transform: scale(1); box-shadow: 0 2px 4px rgba(0,0,0,0.15); } }
+
+        #summary-content .card { border: 1px solid var(--divider-color); }
+        #summary-content .score-table { box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; border: 1px solid #f0f0f0; }
+        #summary-content .score-table thead { background-color: #f5f5f5; }
+        #summary-content .score-table th { font-weight: 700; color: var(--primary-dark-color); }
+        #summary-content h3 { border-bottom: 2px solid var(--primary-color); padding-bottom: 8px; margin-bottom: 16px; }
+        #summary-content h4 { margin-top: 24px; margin-bottom: 10px; color: #7f8c8d; text-transform: uppercase; font-size: 14px; }
+
+        .history-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .history-item-header h4 { margin: 0; }
+        .history-item-header .date { font-size: 12px; color: var(--text-secondary-color); font-weight: 500; }
+        .history-item-body p { margin: 0 0 12px 0; color: var(--accent-color); font-weight: 500; }
+
+        /* --- Scorecard Screen Compaction Styles --- */
+        #scorecard-screen .content {
+            padding: 12px 10px; /* Reduced vertical and horizontal padding */
+        }
+        #scorecard-screen .card {
+            padding: 10px;      /* Reduced card padding */
+            margin-bottom: 10px; /* Reduced space between cards */
+        }
+        #scorecard-screen .score-table th,
+        #scorecard-screen .score-table td {
+            padding: 8px 6px; /* Reduced table cell padding */
+            font-size: 13px; /* Slightly smaller font in tables */
+        }
+        #scorecard-screen .score-table th {
+            font-weight: 500;
+        }
+        #scorecard-screen .this-over {
+            font-size: 14px;
+        }
+        #scorecard-screen .scoring-controls {
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        #scorecard-screen .scoring-controls .btn {
+            font-size: 13px;
+            padding: 9px 5px; /* Adjust padding for button height */
+        }
+        #scorecard-screen .run-buttons {
+            gap: 8px;
+            margin-top: 10px;
+        }
+        #scorecard-screen .run-buttons .btn {
+            width: 50px;
+            height: 50px;
+            font-size: 18px;
+        }
+        #scorecard-screen .btn-group {
+            margin-top: 12px;
+        }
+
+        /* --- Opening Screen Adjustment --- */
+        #new-match-screen .content {
+            padding: 12px;
+        }
+        #new-match-screen .card {
+            margin-bottom: 12px;
+            padding: 12px;
+        }
+        #new-match-screen .form-group {
+            margin-bottom: 12px;
+        }
+        #new-match-screen .btn-group {
+            margin-top: 12px;
+        }
+
+
+        /* --- Teams & Tournament Style Enhancements --- */
+        #teams-list-screen .card h3 {
+            color: var(--primary-dark-color);
+        }
+        #teams-list-screen .card {
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.25s ease-in-out;
+        }
+        #teams-list-screen .card:hover {
+            transform: translateX(4px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        #tournament-screen .card h3 {
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-dark-color);
+            margin-bottom: 20px;
+        }
+        #tournament-screen .add-btn {
+            background-color: #eaf5fc;
+            border: 1px dashed var(--primary-color);
+            transition: background-color 0.2s ease;
+        }
+        #tournament-screen .add-btn:hover {
+            background-color: #d6eaf8;
+        }
+        #tournament-screen .form-group input:focus,
+        #tournament-screen .form-group select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+            outline: none;
+        }
+        #tournament-nav .nav-item {
+            padding: 4px 0;
+            position: relative;
+        }
+        #tournament-nav .nav-item.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 20%;
+            right: 20%;
+            height: 3px;
+            background-color: var(--primary-color);
+            border-radius: 0 0 4px 4px;
+        }
+        .points-table th {
+            background-color: #d6eaf8; /* Light primary color */
+            color: var(--primary-dark-color);
+            font-size: 14px;
+        }
+        .result-match-item {
+            background-color: #fafafa;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+        .summary-input:focus, .date-time-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+            outline: none;
+        }
+        .date-time-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--divider-color);
+            border-radius: 6px;
+            font-size: 13px;
+            text-align: center;
+            background-color: #fdfdfd;
+        }
+
+
+        /* --- Player list Style Enhancements --- */
+        #team-details-content .card {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 8px;
+        }
+        .player-row {
+            background: #ffffff;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.07);
+            padding: 10px 15px;
+            border: none;
+            border-left: 5px solid var(--accent-color);
+        }
+        .player-row:last-child {
+            margin-bottom: 0;
+        }
+        .player-row span {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-primary-color);
+            display: flex;
+            align-items: center;
+        }
+        .player-row span::before {
+            content: 'person';
+            font-family: 'Material Icons';
+            margin-right: 12px;
+            color: var(--primary-color);
+            font-size: 22px;
+        }
+        .player-row:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-left-color: var(--primary-color);
+            background-color: #fff;
+        }
+
+        /* --- Tournament Save Button Fix --- */
+        #tournament-save-btn-container {
+            position: fixed;
+            bottom: 80px; /* Adjust to be above bottom nav */
+            right: 20px;
+            z-index: 200;
+            display: none; /* Controlled by JS */
+            height: 56px;
+            width: 56px;
+        }
+        #tournament-save-btn-container .fab {
+            position: absolute; /* Relative to the container */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, var(--primary-color), var(--primary-dark-color));
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+        <div id="login-box">
+            <h2>Admin Login</h2>
+            <div class="form-group">
+                <input type="password" id="login-password-input" placeholder="Enter Access Code">
+            </div>
+            <button class="btn" id="login-btn">Login</button>
+        </div>
+    </div>
+
+    <div id="app-container" style="display: none;">
+        <div id="new-match-screen" class="screen active">
+            <header class="app-header"></header>
+            <main class="content">
+                <div class="card">
+                    <h2>Teams</h2>
+                    <div class="form-group">
+                        <label>Team A Name</label>
+                        <div class="input-with-dropdown">
+                            <input type="text" id="teamA-input" placeholder="Enter Team A Name">
+                            <button class="icon-button" onclick="openTeamSelectModal('A')"><i class="material-icons">arrow_drop_down</i></button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Team B Name</label>
+                        <div class="input-with-dropdown">
+                            <input type="text" id="teamB-input" placeholder="Enter Team B Name">
+                            <button class="icon-button" onclick="openTeamSelectModal('B')"><i class="material-icons">arrow_drop_down</i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="form-group"><label>Toss win by?</label><select id="toss-winner-select"></select></div>
+                    <div class="form-group"><label>Opted to?</label><div class="radio-group"><label><input type="radio" name="opted-to" value="bat" checked> Bat</label><label><input type="radio" name="opted-to" value="ball"> Ball</label></div></div>
+                    <div class="form-group"><label>Overs</label><input type="number" id="overs-input" placeholder="e.g. 10"></div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" onclick="navigate('advanced-settings-screen')">Advance Setting</button>
+                    <button class="btn" onclick="startNewMatch()">Start Match</button>
+                </div>
+            </main>
+            <footer class="bottom-nav">
+                <div class="nav-item active" data-screen="new-match-screen"><i class="material-icons">add_circle</i><span>New Match</span></div>
+                <div class="nav-item" data-screen="teams-list-screen"><i class="material-icons">group</i><span>Teams</span></div>
+                <div class="nav-item" data-screen="tournament-screen"><i class="material-icons">emoji_events</i><span>Tournament</span></div>
+                <div class="nav-item" data-screen="history-screen"><i class="material-icons">history</i><span>History</span></div>
+            </footer>
+        </div>
+
+        <div id="advanced-settings-screen" class="screen">
+            <header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1>Match Setting</h1></header>
+            <main class="content">
+                <div class="card"><div class="form-group"><label>Player per team</label><input type="number" id="players-per-team-input" value="11"></div></div>
+                <div class="card">
+                    <div class="setting-row"><span>No Ball</span><label class="switch"><input type="checkbox" id="nb-main-toggle" checked><span class="slider"></span></label></div>
+                    <div class="setting-row"><span>Re-ball</span><label class="switch"><input type="checkbox" id="nb-reball-toggle" checked><span class="slider"></span></label></div>
+                    <div class="setting-row"><span>No Ball Run</span><input type="number" id="nb-run-input" value="1"></div>
+                </div>
+                <div class="card">
+                    <div class="setting-row"><span>Wide Ball</span><label class="switch"><input type="checkbox" id="wd-main-toggle" checked><span class="slider"></span></label></div>
+                    <div class="setting-row"><span>Re-ball</span><label class="switch"><input type="checkbox" id="wd-reball-toggle" checked><span class="slider"></span></label></div>
+                    <div class="setting-row"><span>Wide Ball Run</span><input type="number" id="wd-run-input" value="1"></div>
+                </div>
+                <button class="btn" onclick="goBack()">Save Setting</button>
+            </main>
+        </div>
+
+        <div id="select-opening-players-screen" class="screen">
+            <header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1 id="select-players-header">Select Players</h1></header>
+            <main class="content">
+                <div class="card">
+                    <div class="form-group">
+                        <label>Striker</label>
+                        <div id="striker-container"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Non-Striker</label>
+                        <div id="non-striker-container"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Opening Bowler</label>
+                        <div id="opening-bowler-container"></div>
+                    </div>
+                </div>
+                <button id="start-innings-btn" class="btn" onclick="confirmOpeningPlayers()">1st Innings Start</button>
+            </main>
+        </div>
+
+        <div id="scorecard-screen" class="screen">
+            <header class="app-header">
+                <h1 id="scorecard-header-teams"></h1>
+                <button class="icon-button" id="full-scorecard-btn"><span style="font-size:24px;">🏏</span></button>
+            </header>
+            <main class="content">
+                <div class="scoreboard card"><h2 id="scoreboard-main"></h2><p id="scoreboard-details"></p></div>
+                <div class="card">
+                    <div class="table-responsive">
+                        <table class="score-table">
+                            <thead><tr><th>BATSΜΑΝ</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead>
+                            <tbody id="batsman-table"></tbody>
+                        </table>
+                    </div>
+                    <div class="table-responsive">
+                         <table class="score-table">
+                            <thead><tr><th>BOWLER</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead>
+                            <tbody id="bowler-table"></tbody>
+                        </table>
+                    </div>
+                    <div><strong class="this-over">This Over:</strong> <span id="this-over-display"></span></div>
+                </div>
+                <div class="scoring-controls">
+                    <button id="wd-btn" class="btn" onclick="handleExtra('wd')">Wd</button>
+                    <button id="nb-btn" class="btn" onclick="handleExtra('nb')">Nb</button>
+                    <button id="byes-btn" class="btn" onclick="handleExtra('byes')">Byes</button>
+                    <button id="lb-btn" class="btn" onclick="handleExtra('lb')">Lb</button>
+                    <button class="btn" style="background: var(--danger-color);" onclick="handleWicket()">Wicket</button>
+                    <button class="btn" onclick="handleRetire()">Retire</button>
+                    <button class="btn" onclick="swapBatsmen(true)">Swap</button>
+                    <button class="btn" onclick="undoLastAction()">Undo</button>
+                </div>
+                 <div class="run-buttons">
+                    <button class="btn" onclick="handleRun(0)">0</button><button class="btn" onclick="handleRun(1)">1</button>
+                    <button class="btn" onclick="handleRun(2)">2</button><button class="btn" onclick="handleRun(3)">3</button>
+                    <button class="btn" onclick="handleRun(4)">4</button><button class="btn" onclick="handleRun(5)">5</button>
+                    <button class="btn" onclick="handleRun(6)">6</button>
+                    <button class="btn btn-secondary" onclick="showModal('penalty-run-modal')">...</button>
+                </div>
+                <div class="btn-group">
+                     <button class="btn btn-secondary" onclick="showPartnership()">Partnership</button>
+                     <button class="btn btn-secondary" onclick="showExtras()">Extras</button>
+                </div>
+                <div class="btn-group" style="justify-content: flex-start;">
+                     <button id="new-over-btn" class="btn" onclick="forceNewOver()" style="flex-grow: 0; width: auto; min-width: 120px;">New Over</button>
+                </div>
+            </main>
+            <button id="new-match-from-scorecard-btn" class="btn" onclick="resetToNewMatch()">New Match</button>
+        </div>
+
+        <div id="match-summary-screen" class="screen">
+            <header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1>Full Scorecard</h1></header>
+            <main class="content" id="summary-content-wrapper"><div id="summary-content"></div></main>
+            <div class="btn-group" style="padding: 0 16px 16px 16px;">
+                <button class="btn" id="download-pdf-btn">Download PDF</button>
+            </div>
+        </div>
+
+        <div id="teams-list-screen" class="screen"><header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1>Teams</h1></header><main class="content" id="teams-list-content"></main><div class="fab" onclick="showModal('create-team-modal')"><i class="material-icons">add</i></div></div>
+        <div id="team-details-screen" class="screen"><header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1 id="team-details-header"></h1></header><main class="content" id="team-details-content"></main><div class="fab" id="add-player-fab" onclick=""><i class="material-icons">person_add</i></div></div>
+        <div id="player-stats-screen" class="screen"><header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1 id="player-name-header"></h1></header><main id="player-stats-content"></main></div>
+        <div id="tournament-screen" class="screen">
+            <header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1>Tournament</h1></header>
+            <main class="content" id="tournament-content-wrapper"></main>
+             <div id="tournament-save-btn-container">
+                <button class="fab" onclick="saveData()"><i class="material-icons">save</i></button>
+             </div>
+            <footer class="bottom-nav" id="tournament-nav">
+                <div class="nav-item active" data-tab="fixtures"><i class="material-icons">view_list</i><span>Fixtures</span></div>
+                <div class="nav-item" data-tab="points"><i class="material-icons">leaderboard</i><span>Points</span></div>
+                <div class="nav-item" data-tab="results"><i class="material-icons">done_all</i><span>Result</span></div>
+            </footer>
+        </div>
+        <div id="history-screen" class="screen"><header class="app-header"><button class="icon-button" onclick="goBack()"><i class="material-icons">arrow_back</i></button><h1>History</h1></header><main class="content" id="history-content"></main></div>
+
+        <div id="innings-break-modal" class="modal-overlay"><div class="modal-content" style="text-align: center;"><h1 id="innings-break-header">1st Innings End</h1><p id="innings-break-target"></p><div class="btn-group"><button class="btn" onclick="showSecondInningsPlayersScreen()">Start 2nd Innings</button></div></div></div>
+        <div id="create-team-modal" class="modal-overlay"><div class="modal-content"><h1>Create Team</h1><div class="form-group"><label>Team Name</label><input type="text" id="new-team-name-input"></div><div class="btn-group"><button class="btn btn-secondary" onclick="closeModal('create-team-modal')">Cancel</button><button class="btn" onclick="createTeam()">OK</button></div></div></div>
+        <div id="add-player-modal" class="modal-overlay"><div class="modal-content"><h1>Add Player</h1><div class="form-group"><label>Player Name</label><input type="text" id="new-player-name-input"></div><button class="btn" onclick="addPlayer()">Save</button></div></div>
+        <div id="fall-of-wicket-modal" class="modal-overlay"><div class="modal-content"><h1>Fall of Wicket</h1><div class="form-group"><label>How wicket fall?</label><select id="wicket-type"><option>Bowled</option><option>Catch Out</option><option>Run out striker</option><option>Run out Non-striker</option><option>Stumping</option><option>LBW</option><option>Hit wicket</option></select></div><div class="form-group"><label>New Batsman</label><input type="text" id="new-batsman-input-wicket"></div><button class="btn" onclick="confirmNewBatsman('wicket')">Done</button></div></div>
+        <div id="retire-modal" class="modal-overlay"><div class="modal-content"><h1>New Batsman</h1><div class="form-group"><label>New Batsman Name</label><input type="text" id="new-batsman-input-retire"></div><button class="btn" onclick="confirmNewBatsman('retire')">Done</button></div></div>
+        <div id="choose-bowler-modal" class="modal-overlay">
+            <div class="modal-content">
+                <h1>Choose New Bowler</h1>
+                <div class="form-group">
+                    <label>Select a new bowler</label>
+                    <div id="new-bowler-container">
+                        <input type="text" id="new-bowler-input">
+                    </div>
+                </div>
+                <button class="btn" onclick="confirmNewBowler()">Done</button>
+            </div>
+        </div>
+        <div id="penalty-run-modal" class="modal-overlay"><div class="modal-content"><h3>Penalty Run</h3><div class="form-group"><input type="number" id="penalty-run-input" placeholder="Enter runs"></div><div class="btn-group"><button class="btn btn-secondary" onclick="closeModal('penalty-run-modal')">Cancel</button><button class="btn" onclick="addPenaltyRuns()">OK</button></div></div></div>
+        <div id="toast-notification" class="toast"></div>
+        <div id="confirmation-modal" class="modal-overlay">
+            <div class="modal-content">
+                <h3 id="confirmation-modal-title">Are you sure?</h3>
+                <p id="confirmation-modal-message"></p>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="confirmation-modal-cancel">Cancel</button>
+                    <button class="btn" style="background: var(--danger-color);" id="confirmation-modal-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="team-select-modal" class="modal-overlay">
+            <div class="modal-content">
+                <h3 id="team-select-modal-title">Select Team</h3>
+                <div id="team-select-modal-list"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- FIREBASE SETUP ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyATq50_cv4xKiOcqO3oRGkCHLJs5w4QGn4",
+      authDomain: "cricket-scorer-edc3b.firebaseapp.com",
+      projectId: "cricket-scorer-edc3b",
+      storageBucket: "cricket-scorer-edc3b.firebasestorage.app",
+      messagingSenderId: "957496344269",
+      appId: "1:957496344269:web:2a793cde06ac430ef93384"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    let currentUser = null;
+
+
+    // --- GLOBAL APP STATE & LOGIC ---
+    let navigationStack = ['new-match-screen'];
+    let matchState = {};
+    let appData = { teams: [], history: [] };
+    let history = []; // for undo
+    let tournamentState = {};
+
+    // --- INITIALIZATION & DATA HANDLING ---
+    function generateUniqueId() { return Date.now().toString(36) + Math.random().toString(36).substring(2); }
+
+    function getInitialState() {
+        return {
+            id: generateUniqueId(),
+            teamA_id: null, teamB_id: null,
+            battingTeamObject: null, bowlingTeamObject: null,
+            completionDate: null,
+            settings: { totalOvers: 5, playersPerTeam: 11, wd: { reball: true, runs: 1 }, nb: { reball: true, runs: 1 } },
+            innings: {
+                1: { team: '', score: 0, wickets: 0, balls: 0, extras: { total: 0, wd: 0, nb: 0, byes: 0, lb: 0 }, allBatsmen: [], allBowlers: [] },
+                2: { team: '', score: 0, wickets: 0, balls: 0, extras: { total: 0, wd: 0, nb: 0, byes: 0, lb: 0 }, allBatsmen: [], allBowlers: [] }
+            },
+            currentInnings: 1, battingTeam: '', bowlingTeam: '',
+            batsmen: [], currentPartnership: { runs: 0, balls: 0, batsmen: [] },
+            bowlers: [], currentBowlerId: null,
+            thisOver: [], isOverComplete: false, pendingRun: null,
+            result: ''
+        };
+    }
+
+    // --- NAVIGATION & UI UTILS ---
+    function navigate(screenId) {
+        const currentScreenId = navigationStack[navigationStack.length - 1];
+        if (currentScreenId === screenId) return;
+        if (currentScreenId) {
+            const currentScreen = document.getElementById(currentScreenId);
+            currentScreen.classList.remove('active');
+            currentScreen.classList.add('inactive-left');
+        }
+        const screenElement = document.getElementById(screenId);
+        screenElement.classList.remove('inactive-left');
+        screenElement.classList.add('active');
+        navigationStack.push(screenId);
+    }
+
+    function goBack() {
+        if (navigationStack.length <= 1) return;
+        const currentScreenId = navigationStack.pop();
+        const prevScreenId = navigationStack[navigationStack.length - 1];
+        document.getElementById(currentScreenId)?.classList.remove('active');
+        const prevScreen = document.getElementById(prevScreenId);
+        prevScreen?.classList.remove('inactive-left');
+        prevScreen?.classList.add('active');
+    }
+
+    function resetToNewMatch() {
+        matchState = getInitialState();
+        history = [];
+        localStorage.removeItem('inProgressMatch'); // Clear in-progress match on reset
+        document.getElementById('teamA-input').value = '';
+        document.getElementById('teamB-input').value = '';
+        document.getElementById('overs-input').value = '';
+        navigationStack = ['new-match-screen'];
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active', 'inactive-left'));
+        document.getElementById('new-match-screen').classList.add('active');
+        document.getElementById('new-match-from-scorecard-btn').style.display = 'none';
+
+        document.querySelectorAll('.bottom-nav .nav-item').forEach(item => item.classList.remove('active'));
+        const newMatchNavItem = document.querySelector('.bottom-nav .nav-item[data-screen="new-match-screen"]');
+        if (newMatchNavItem) newMatchNavItem.classList.add('active');
+
+        // ** ADDED: Publish empty state to viewers **
+        publishPublicData();
+    }
+
+    function navigateReplace(newScreenId) {
+        if (navigationStack.length > 0) {
+            const currentScreenId = navigationStack.pop();
+            if (currentScreenId) document.getElementById(currentScreenId)?.classList.remove('active', 'inactive-left');
+        }
+        const newScreenElement = document.getElementById(newScreenId);
+        newScreenElement.classList.remove('inactive-left');
+        newScreenElement.classList.add('active');
+        navigationStack.push(newScreenId);
+    }
+
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const screenId = item.dataset.screen;
+            if(!screenId) return;
+            navigationStack = ['new-match-screen'];
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active', 'inactive-left'));
+            document.getElementById('new-match-screen').classList.add('active');
+            if (screenId !== 'new-match-screen') navigate(screenId);
+            document.querySelectorAll('.bottom-nav .nav-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            if (screenId === 'teams-list-screen') renderTeamsList();
+            if (screenId === 'history-screen') renderHistoryList();
+            if (screenId === 'tournament-screen') renderTournamentFixtures();
+        });
+    });
+
+    function showModal(modalId) { document.getElementById(modalId).style.display = 'flex'; }
+    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+    function showToast(message) {
+        const toast = document.getElementById('toast-notification');
+        toast.textContent = message; toast.style.opacity = 1; toast.style.transform = 'translateX(-50%) translateY(0)';
+        setTimeout(() => { toast.style.opacity = 0; toast.style.transform = 'translateX(-50%) translateY(20px)'; }, 2500);
+    }
+
+    function showConfirmationModal(message, onConfirm, onCancel = () => {}) {
+        document.getElementById('confirmation-modal-message').textContent = message;
+        const confirmBtn = document.getElementById('confirmation-modal-confirm');
+        const cancelBtn = document.getElementById('confirmation-modal-cancel');
+        const confirmHandler = () => { onConfirm(); cleanup(); };
+        const cancelHandler = () => { onCancel(); cleanup(); };
+        const cleanup = () => {
+            closeModal('confirmation-modal');
+            confirmBtn.removeEventListener('click', confirmHandler);
+            cancelBtn.removeEventListener('click', cancelHandler);
+        };
+        confirmBtn.addEventListener('click', confirmHandler, { once: true });
+        cancelBtn.addEventListener('click', cancelHandler, { once: true });
+        showModal('confirmation-modal');
+    }
+
+    // --- ** NEW FUNCTION TO PUBLISH DATA FOR VIEWERS ** ---
+    async function publishPublicData() {
+        if (!db) return; // Ensure Firebase is initialized
+        const publicDataRef = db.collection("publicData").doc("liveScoreData");
+
+        try {
+            await publicDataRef.set({
+                appData: appData,
+                tournamentState: tournamentState,
+                liveMatchState: matchState // The current state of the match
+            });
+            console.log("Public data published successfully.");
+        } catch (error) {
+            console.error("Error publishing public data: ", error);
+            // Do not show toast for every minor failure to avoid spamming the admin
+        }
+    }
+
+    // --- Data Persistence (Firebase & Local Storage) ---
+    function saveAppDataToLocal() { try { localStorage.setItem('cricketAppData', JSON.stringify(appData)); } catch (e) { console.error("Error saving app data to local", e); }}
+    function loadAppDataFromLocal() {
+        try { appData = JSON.parse(localStorage.getItem('cricketAppData')) || { teams: [], history: [] }; }
+        catch (e) { console.error("Error loading app data from local", e); appData = { teams: [], history: [] }; }
+    }
+    function saveTournamentDataToLocal() { try { localStorage.setItem('tournamentData', JSON.stringify(tournamentState)); } catch (e) { console.error("Error saving tournament data to local", e); }}
+    function loadTournamentDataFromLocal() {
+        try {
+            const data = localStorage.getItem('tournamentData');
+            tournamentState = data ? JSON.parse(data) : {};
+            if (!tournamentState.groups || !tournamentState.fixtures) {
+                resetTournamentState();
+            }
+        }
+        catch (e) { console.error("Error loading tournament data from local", e); resetTournamentState(); }
+    }
+
+    // Combined save function for Firebase and Local Storage
+    async function saveData() {
+        // Save to local storage first for speed and offline availability
+        saveAppDataToLocal();
+        saveTournamentDataToLocal();
+
+        if (currentUser) {
+            try {
+                const userDocRef = db.collection("users").doc(currentUser.uid);
+                await userDocRef.set({
+                    appData: appData,
+                    tournamentState: tournamentState
+                });
+                console.log("Private data saved to Firebase.");
+            } catch (error) {
+                console.error("Error saving private data to Firebase: ", error);
+                showToast("Could not sync private data.");
+            }
+        }
+
+        // ** এই লাইনটি যোগ করা হয়েছে **
+        // এখন থেকে ডেটা সেভ করার পাশাপাশি ব্যবহারকারীদের জন্যেও পাবলিশ করা হবে
+        await publishPublicData();
+
+        showToast('Data saved and synced!');
+    }
+
+
+    // Combined load function
+    async function loadData() {
+        // 1. Load from local storage first for immediate UI
+        loadAppDataFromLocal();
+        loadTournamentDataFromLocal();
+        console.log("Loaded data from local storage.");
+
+        // 2. Then, fetch from Firebase to get the most up-to-date info
+        if (!currentUser) return;
+
+        try {
+            const userDocRef = db.collection("users").doc(currentUser.uid);
+            const docSnap = await userDocRef.get();
+
+            if (docSnap.exists()) {
+                console.log("Firebase data found. Overwriting local data.");
+                const firebaseData = docSnap.data();
+                appData = firebaseData.appData || { teams: [], history: [] };
+                tournamentState = firebaseData.tournamentState || {};
+                if (!tournamentState.groups || !tournamentState.fixtures) {
+                    resetTournamentState();
+                }
+                saveAppDataToLocal();
+                saveTournamentDataToLocal();
+                console.log("Synced Firebase data to local storage.");
+            } else {
+                console.log("No data in Firebase. Uploading local data if it exists.");
+                await saveData(); // This will save the currently loaded local data to Firebase
+            }
+        } catch (error) {
+            console.error("Error loading data from Firebase: ", error);
+            showToast("Could not load cloud data.");
+        }
+
+        // Finally, render the UI with the definitive data
+        renderInitialUI();
+    }
+
+    // This function ensures the UI is correctly rendered after all data is loaded
+    function renderInitialUI() {
+        updateTossOptions();
+        const activeScreen = document.querySelector('.screen.active');
+        if (activeScreen) {
+             if (activeScreen.id === 'teams-list-screen') renderTeamsList();
+             if (activeScreen.id === 'history-screen') renderHistoryList();
+             if (activeScreen.id === 'tournament-screen') renderTournamentFixtures();
+        }
+    }
+
+    // Firebase Anonymous Authentication
+    function signInAnonymously() {
+      auth.onAuthStateChanged(async user => {
+        if (user) {
+          currentUser = user;
+          console.log("Signed in with UID:", currentUser.uid);
+          await loadData(); // Load data after user is authenticated
+          checkForInProgressMatch(); // Check for incomplete match after loading main data
+        } else {
+          auth.signInAnonymously().catch(error => {
+            console.error("Anonymous sign-in failed:", error);
+            // If sign-in fails, still load from local storage and check for incomplete match
+            loadAppDataFromLocal();
+            loadTournamentDataFromLocal();
+            renderInitialUI();
+            checkForInProgressMatch();
+          });
+        }
+      });
+    }
+
+    function checkForInProgressMatch() {
+        const inProgressMatchData = localStorage.getItem('inProgressMatch');
+        if (inProgressMatchData) {
+            showConfirmationModal("An unfinished match was found. Would you like to resume it?",
+                () => { // onConfirm
+                    try {
+                        const loadedMatch = JSON.parse(inProgressMatchData);
+                        matchState = loadedMatch;
+                        history = [JSON.parse(JSON.stringify(matchState))];
+                        renderScorecard();
+                        navigate('scorecard-screen');
+                        showToast("Match resumed.");
+                    } catch (e) {
+                        console.error("Failed to parse in-progress match.", e);
+                        localStorage.removeItem('inProgressMatch');
+                        showToast("Could not resume match, data was corrupted.");
+                    }
+                },
+                () => { // onCancel
+                    localStorage.removeItem('inProgressMatch');
+                    showToast("Previous match discarded.");
+                }
+            );
+        }
+    }
+
+
+    // --- TEAMS & PLAYERS ---
+    function renderTeamsList() {
+        const content = document.getElementById('teams-list-content');
+        content.innerHTML = '';
+        if (appData.teams.length === 0) { content.innerHTML = '<div class="card"><p>No teams created. Tap + to add one.</p></div>'; return; }
+        appData.teams.forEach(team => {
+            const teamCard = document.createElement('div');
+            teamCard.className = 'card';
+            teamCard.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div onclick="renderTeamDetails('${team.id}'); navigate('team-details-screen');" style="flex-grow: 1; cursor: pointer;">
+                        <h3>${team.name}</h3><p style="margin:0; color: var(--text-secondary-color);">${team.players.length} Players</p>
+                    </div>
+                    <div>
+                        <button class="icon-button" style="color: var(--text-secondary-color);" onclick="event.stopPropagation(); editTeamName('${team.id}');"><i class="material-icons">edit</i></button>
+                        <button class="icon-button" style="color: var(--danger-color);" onclick="event.stopPropagation(); deleteTeam('${team.id}');"><i class="material-icons">delete</i></button>
+                    </div>
+                </div>`;
+            content.appendChild(teamCard);
+        });
+    }
+
+    function createTeam() {
+        const nameInput = document.getElementById('new-team-name-input'); const name = nameInput.value.trim();
+        if (name) { appData.teams.push({ id: generateUniqueId(), name, players: [] }); saveData(); nameInput.value = ''; closeModal('create-team-modal'); renderTeamsList(); }
+    }
+
+    function editTeamName(teamId) {
+        const team = appData.teams.find(t => t.id === teamId);
+        if (!team) return;
+        const newName = prompt("Enter new team name:", team.name);
+        if (newName && newName.trim() !== "") {
+            team.name = newName.trim();
+            saveData();
+            renderTeamsList();
+            showToast("Team name updated.");
+        }
+    }
+
+    function deleteTeam(teamId) { showConfirmationModal("Are you sure you want to delete this team?", () => { appData.teams = appData.teams.filter(t => t.id !== teamId); saveData(); renderTeamsList(); showToast("Team deleted."); }); }
+
+    function renderTeamDetails(teamId) {
+        const team = appData.teams.find(t => t.id === teamId);
+        if (!team) { goBack(); return; }
+        document.getElementById('team-details-header').innerText = team.name;
+        const content = document.getElementById('team-details-content'); content.innerHTML = '<div class="card"></div>';
+        const cardContent = content.querySelector('.card');
+
+        if (team.players.length === 0) {
+            cardContent.innerHTML = '<p>No players. Tap + to add.</p>';
+        } else {
+            cardContent.innerHTML = ''; // Clear previous content
+            team.players.forEach(player => {
+                const playerRow = document.createElement('div'); playerRow.className = 'player-row';
+                playerRow.innerHTML = `
+                    <span onclick="renderPlayerStats('${player.id}', '${team.id}')">${player.name}</span>
+                    <div>
+                        <button class="icon-button" style="color: var(--text-secondary-color);" onclick="editPlayerName('${player.id}', '${team.id}')"><i class="material-icons">edit</i></button>
+                        <button class="icon-button" style="color: var(--danger-color);" onclick="deletePlayer('${player.id}', '${team.id}')"><i class="material-icons">delete</i></button>
+                    </div>`;
+                cardContent.appendChild(playerRow);
+            });
+        }
+        document.getElementById('add-player-fab').onclick = () => { document.getElementById('add-player-modal').dataset.teamId = teamId; showModal('add-player-modal'); };
+    }
+
+    function addPlayer() {
+        const teamId = document.getElementById('add-player-modal').dataset.teamId; const team = appData.teams.find(t => t.id === teamId);
+        const nameInput = document.getElementById('new-player-name-input'); const name = nameInput.value.trim();
+        if (name && team) { team.players.push({ id: generateUniqueId(), name, stats: {} }); saveData(); nameInput.value = ''; closeModal('add-player-modal'); renderTeamDetails(teamId); }
+    }
+
+    function editPlayerName(playerId, teamId) {
+        const team = appData.teams.find(t => t.id === teamId); const player = team?.players.find(p => p.id === playerId); if (!player) return;
+        const newName = prompt("Enter new name for the player:", player.name);
+        if (newName && newName.trim() !== "") { player.name = newName.trim(); saveData(); renderTeamDetails(teamId); showToast("Player name updated."); }
+    }
+
+    function deletePlayer(playerId, teamId) { showConfirmationModal("Delete this player?", () => { const team = appData.teams.find(t => t.id === teamId); if (team) { team.players = team.players.filter(p => p.id !== playerId); saveData(); renderTeamDetails(teamId); showToast("Player deleted."); } }); }
+
+    function renderPlayerStats(playerId, teamId) {
+        const team = appData.teams.find(t => t.id === teamId); const player = team?.players.find(p => p.id === playerId);
+        if (!team || !player) { showToast("Player not found!"); goBack(); return; }
+        navigate('player-stats-screen');
+        document.getElementById('player-name-header').innerText = player.name;
+        const content = document.getElementById('player-stats-content');
+        content.innerHTML = `
+            <div class="player-profile-header"><div class="player-profile-pic"><i class="material-icons" style="font-size: 50px; color: white;">person</i></div><h2>${player.name}</h2><p>${team.name}</p></div>
+            <div class="bottom-nav player-stats-tabs">
+                <div id="batting-tab" class="nav-item active" onclick="switchPlayerTab('batting', '${playerId}', '${teamId}')"><i class="material-icons">sports_cricket</i><span>Batting</span></div>
+                <div id="bowling-tab" class="nav-item" onclick="switchPlayerTab('bowling', '${playerId}', '${teamId}')"><i class="material-icons">sports</i><span>Bowling</span></div>
+            </div>
+            <div class="content" id="player-stats-container"></div>`;
+        switchPlayerTab('batting', playerId, teamId);
+    }
+
+    function switchPlayerTab(tab, playerId, teamId) {
+        const team = appData.teams.find(t => t.id === teamId);
+        const player = team?.players.find(p => p.id === playerId);
+        if (!player) return;
+
+        document.getElementById('batting-tab').classList.toggle('active', tab === 'batting');
+        document.getElementById('bowling-tab').classList.toggle('active', tab === 'bowling');
+        const container = document.getElementById('player-stats-container');
+        const stats = player.stats || {};
+
+        if (tab === 'batting') {
+            const battingStats = stats.batting || { runs: 0, balls: 0, fours: 0, sixes: 0 };
+            const sr = battingStats.balls > 0 ? (battingStats.runs / battingStats.balls * 100).toFixed(2) : '0.00';
+            const avg = (stats.matches || 0) > 0 ? (battingStats.runs / stats.matches).toFixed(2) : '0.00'; // Simplified avg
+            container.innerHTML = `<div class="stats-grid">
+                <div class="stat-box"><div class="value">${stats.matches || 0}</div><div class="label">Matches</div></div>
+                <div class="stat-box"><div class="value">${battingStats.runs}</div><div class="label">Runs</div></div>
+                <div class="stat-box"><div class="value">${sr}</div><div class="label">SR</div></div>
+                <div class="stat-box"><div class="value">${avg}</div><div class="label">Average</div></div>
+                <div class="stat-box"><div class="value">${battingStats.fours}</div><div class="label">Fours</div></div>
+                <div class="stat-box"><div class="value">${battingStats.sixes}</div><div class="label">Sixes</div></div>
+            </div>`;
+        } else {
+            const bowlingStats = stats.bowling || { balls: 0, runs: 0, wickets: 0, maidens: 0 };
+            const overs = bowlingStats.balls > 0 ? `${Math.floor(bowlingStats.balls / 6)}.${bowlingStats.balls % 6}` : '0.0';
+            const econ = bowlingStats.balls > 0 ? (bowlingStats.runs / (bowlingStats.balls / 6)).toFixed(2) : '0.00';
+            container.innerHTML = `<div class="stats-grid">
+                <div class="stat-box"><div class="value">${stats.matches || 0}</div><div class="label">Matches</div></div>
+                <div class="stat-box"><div class="value">${bowlingStats.wickets}</div><div class="label">Wickets</div></div>
+                <div class="stat-box"><div class="value">${overs}</div><div class="label">Overs</div></div>
+                <div class="stat-box"><div class="value">${econ}</div><div class="label">Economy</div></div>
+                <div class="stat-box"><div class="value">${bowlingStats.maidens}</div><div class="label">Maidens</div></div>
+                <div class="stat-box"><div class="value">${bowlingStats.runs}</div><div class="label">Runs Conceded</div></div>
+            </div>`;
+        }
+    }
+
+
+    // --- MATCH SETUP & CORE LOGIC ---
+    const teamAInput = document.getElementById('teamA-input'), teamBInput = document.getElementById('teamB-input'), tossWinnerSelect = document.getElementById('toss-winner-select');
+    function updateTossOptions() {
+        const teamA = teamAInput.value.trim() || 'Team A';
+        const teamB = teamBInput.value.trim() || 'Team B';
+        tossWinnerSelect.innerHTML = `<option value="${teamA}">${teamA}</option><option value="${teamB}">${teamB}</option>`;
+    }
+    teamAInput.addEventListener('input', () => { matchState.teamA_id = null; updateTossOptions(); });
+    teamBInput.addEventListener('input', () => { matchState.teamB_id = null; updateTossOptions(); });
+
+    function openTeamSelectModal(teamKey) {
+        const listEl = document.getElementById('team-select-modal-list');
+        listEl.innerHTML = '';
+        if (appData.teams.length === 0) {
+            listEl.innerHTML = '<p>No teams saved. Go to the Teams tab to add one.</p>';
+        } else {
+            appData.teams.forEach(team => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.textContent = team.name;
+                item.onclick = () => selectTeam(team.id, team.name, teamKey);
+                listEl.appendChild(item);
+            });
+        }
+        showModal('team-select-modal');
+    }
+
+    function selectTeam(teamId, teamName, teamKey) {
+        if (teamKey === 'A') {
+            document.getElementById('teamA-input').value = teamName;
+            matchState.teamA_id = teamId;
+        } else {
+            document.getElementById('teamB-input').value = teamName;
+            matchState.teamB_id = teamId;
+        }
+        updateTossOptions();
+        closeModal('team-select-modal');
+    }
+
+    function startNewMatch() {
+        matchState = getInitialState();
+        const teamA_name = teamAInput.value.trim();
+        const teamA_selected = appData.teams.find(t => t.name === teamA_name);
+        if (teamA_selected) matchState.teamA_id = teamA_selected.id;
+
+        const teamB_name = teamBInput.value.trim();
+        const teamB_selected = appData.teams.find(t => t.name === teamB_name);
+        if (teamB_selected) matchState.teamB_id = teamB_selected.id;
+
+        if (!teamA_name || !teamB_name) { showToast("Please enter both team names."); return; }
+
+        history = [JSON.parse(JSON.stringify(matchState))];
+        matchState.settings.totalOvers = parseInt(document.getElementById('overs-input').value) || 0;
+        if (matchState.settings.totalOvers <= 0) { showToast("Please enter a valid number of overs."); return; }
+
+        matchState.settings.playersPerTeam = parseInt(document.getElementById('players-per-team-input').value);
+        matchState.settings.wd = { reball: document.getElementById('wd-reball-toggle').checked, runs: parseInt(document.getElementById('wd-run-input').value) };
+        matchState.settings.nb = { reball: document.getElementById('nb-reball-toggle').checked, runs: parseInt(document.getElementById('nb-run-input').value) };
+
+        const tossWinnerName = tossWinnerSelect.value;
+        const optedTo = document.querySelector('input[name="opted-to"]:checked').value;
+
+        if ((tossWinnerName === teamA_name && optedTo === 'bat') || (tossWinnerName === teamB_name && optedTo === 'ball')) {
+            matchState.battingTeam = teamA_name;
+            matchState.bowlingTeam = teamB_name;
+            if(matchState.teamA_id) matchState.battingTeamObject = appData.teams.find(t => t.id === matchState.teamA_id);
+            if(matchState.teamB_id) matchState.bowlingTeamObject = appData.teams.find(t => t.id === matchState.teamB_id);
+        } else {
+            matchState.battingTeam = teamB_name;
+            matchState.bowlingTeam = teamA_name;
+            if(matchState.teamB_id) matchState.battingTeamObject = appData.teams.find(t => t.id === matchState.teamB_id);
+            if(matchState.teamA_id) matchState.bowlingTeamObject = appData.teams.find(t => t.id === matchState.teamA_id);
+        }
+
+        matchState.innings[1].team = matchState.battingTeam;
+        matchState.innings[2].team = matchState.bowlingTeam;
+
+        renderOpeningPlayerSelection(matchState.battingTeamObject, matchState.bowlingTeamObject);
+
+        document.getElementById('select-players-header').innerText = `Select Players - ${matchState.battingTeam}`;
+        document.getElementById('start-innings-btn').innerText = "1st Innings Start";
+        navigate('select-opening-players-screen');
+    }
+
+    function renderOpeningPlayerSelection(battingTeam, bowlingTeam) {
+        const strikerContainer = document.getElementById('striker-container');
+        const nonStrikerContainer = document.getElementById('non-striker-container');
+        const bowlerContainer = document.getElementById('opening-bowler-container');
+
+        if (battingTeam && battingTeam.players.length > 0) {
+            let options = '<option value="">Select Striker</option>';
+            battingTeam.players.forEach(p => options += `<option value="${p.name}">${p.name}</option>`);
+            strikerContainer.innerHTML = `<select id="striker-select">${options}</select>`;
+            nonStrikerContainer.innerHTML = `<select id="non-striker-select">${options.replace('Select Striker', 'Select Non-Striker')}</select>`;
+        } else {
+            strikerContainer.innerHTML = `<input type="text" id="striker-input" placeholder="Enter Striker Name">`;
+            nonStrikerContainer.innerHTML = `<input type="text" id="non-striker-input" placeholder="Enter Non-Striker Name">`;
+        }
+
+        if (bowlingTeam && bowlingTeam.players.length > 0) {
+            let options = '<option value="">Select Bowler</option>';
+            bowlingTeam.players.forEach(p => options += `<option value="${p.name}">${p.name}</option>`);
+            bowlerContainer.innerHTML = `<select id="opening-bowler-select">${options}</select>`;
+        } else {
+            bowlerContainer.innerHTML = `<input type="text" id="opening-bowler-input" placeholder="Enter Bowler Name">`;
+        }
+    }
+
+    function confirmOpeningPlayers() {
+        const strikerEl = document.getElementById('striker-select') || document.getElementById('striker-input');
+        const nonStrikerEl = document.getElementById('non-striker-select') || document.getElementById('non-striker-input');
+        const bowlerEl = document.getElementById('opening-bowler-select') || document.getElementById('opening-bowler-input');
+
+        const strikerName = strikerEl.value.trim();
+        const nonStrikerName = nonStrikerEl.value.trim();
+        const bowlerName = bowlerEl.value.trim();
+
+        if (!strikerName || !nonStrikerName || !bowlerName) { showToast("Please select/enter all player names."); return; }
+        if (strikerName === nonStrikerName) { showToast("Striker and Non-Striker cannot be the same."); return; }
+
+        saveState();
+        const ci = matchState.innings[matchState.currentInnings]; const opponentInning = matchState.innings[matchState.currentInnings === 1 ? 2 : 1];
+        const striker = { id: generateUniqueId(), name: strikerName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
+        const nonStriker = { id: generateUniqueId(), name: nonStrikerName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: false, out: false, retired: false };
+        matchState.batsmen = [striker, nonStriker]; ci.allBatsmen.push(striker, nonStriker);
+        matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [striker.name, nonStriker.name] };
+        const newBowler = { id: generateUniqueId(), name: bowlerName, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 };
+        matchState.bowlers.push(newBowler); opponentInning.allBowlers.push(newBowler);
+        matchState.currentBowlerId = newBowler.id;
+        renderScorecard(); navigateReplace('scorecard-screen');
+    }
+
+    function saveState() {
+        history.push(JSON.parse(JSON.stringify(matchState)));
+        // Save the current state to local storage for recovery
+        if (matchState && matchState.id) {
+            localStorage.setItem('inProgressMatch', JSON.stringify(matchState));
+        }
+    }
+
+    function undoLastAction() {
+        if (history.length > 1) {
+            history.pop(); // Remove current state
+            const prevState = history[history.length - 1]; // Get the previous state
+            matchState = JSON.parse(JSON.stringify(prevState));
+            // Also update the local storage backup
+            localStorage.setItem('inProgressMatch', JSON.stringify(matchState));
+            renderScorecard();
+            showToast("Undo Successful");
+        } else {
+            showToast("Nothing to undo");
+        }
+    }
+
+    function handleExtra(type) { document.querySelectorAll('.scoring-controls .btn').forEach(b => b.classList.remove('active')); document.getElementById(type + '-btn').classList.add('active'); matchState.currentExtra = type; }
+
+    function handleRun(run) {
+        if (matchState.isOverComplete) { showToast("Over is complete. Please start a new over."); return; }
+        saveState();
+
+        const ci = matchState.innings[matchState.currentInnings];
+        const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId);
+        const striker = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired);
+        const extraType = matchState.currentExtra;
+        let isLegalBall = true; // By default, a ball is legal
+
+        if (extraType) {
+            if (extraType === 'nb') {
+                const extraSettings = matchState.settings.nb;
+                isLegalBall = !extraSettings.reball;
+                if (striker) {
+                    striker.runs += run;
+                    // No ball runs don't count towards batsman's balls faced
+                }
+                const totalRuns = run + extraSettings.runs;
+                ci.score += totalRuns;
+                ci.extras.nb += extraSettings.runs;
+                ci.extras.total += extraSettings.runs;
+                if(cb) cb.runs += totalRuns;
+                matchState.thisOver.push(run + 'nb');
+                if (run % 2 !== 0) swapBatsmen();
+            } else if (extraType === 'wd') {
+                const extraSettings = matchState.settings.wd;
+                isLegalBall = !extraSettings.reball;
+                const totalExtraRuns = run + extraSettings.runs;
+                ci.score += totalExtraRuns;
+                ci.extras.wd += totalExtraRuns;
+                ci.extras.total += totalExtraRuns;
+                if(cb) cb.runs += totalExtraRuns;
+                matchState.thisOver.push(run + 'wd');
+                if (run % 2 !== 0) swapBatsmen();
+            } else if (extraType === 'byes' || extraType === 'lb') {
+                isLegalBall = true; // Byes and Leg Byes are ALWAYS legal deliveries.
+                ci.score += run;
+                ci.extras[extraType] += run;
+                ci.extras.total += run;
+                if(striker) striker.balls++;
+                matchState.thisOver.push(run + extraType.charAt(0));
+                if (run % 2 !== 0) swapBatsmen();
+            }
+        } else if (striker) {
+            isLegalBall = true;
+            striker.runs += run;
+            striker.balls++;
+            if (run === 4) striker.fours++;
+            if (run === 6) striker.sixes++;
+            ci.score += run;
+            if (cb) cb.runs += run;
+            matchState.currentPartnership.runs += run;
+            matchState.thisOver.push(run);
+            if (run % 2 !== 0) swapBatsmen();
+        }
+
+        if (isLegalBall) {
+            ci.balls++;
+            if (cb) cb.balls++;
+            matchState.currentPartnership.balls++;
+        }
+
+        matchState.currentExtra = null;
+        document.querySelectorAll('.scoring-controls .btn').forEach(b => b.classList.remove('active'));
+
+        if (isGameOver()) {
+            handleInningsEnd();
+        } else if (isLegalBall && ci.balls > 0 && ci.balls % 6 === 0) {
+            matchState.isOverComplete = true;
+            swapBatsmen();
+        }
+        renderScorecard();
+    }
+
+    function swapBatsmen(manual = false) {
+        if(manual) saveState();
+        const onStrike = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); const nonStrike = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
+        if(onStrike) onStrike.onStrike = false; if(nonStrike) nonStrike.onStrike = true;
+        if(manual) renderScorecard();
+    }
+
+    function confirmNewBowler() {
+        const bowlerEl = document.getElementById('new-bowler-select') || document.getElementById('new-bowler-input');
+        const bowlerName = bowlerEl.value.trim();
+
+        if(!bowlerName) { showToast("Please select/enter a bowler name."); return; }
+
+        const opponentInning = matchState.innings[matchState.currentInnings === 1 ? 2 : 1];
+        let bowler = opponentInning.allBowlers.find(b => b.name === bowlerName);
+        if(!bowler) {
+            bowler = { id: generateUniqueId(), name: bowlerName, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 };
+            opponentInning.allBowlers.push(bowler);
+        }
+        matchState.bowlers = [bowler];
+        matchState.currentBowlerId = bowler.id;
+        matchState.thisOver = [];
+        closeModal('choose-bowler-modal');
+
+        matchState.isOverComplete = false;
+        saveState();
+        renderScorecard();
+    }
+
+    function renderNewBowlerSelection() {
+        const container = document.getElementById('new-bowler-container');
+        const bowlingTeam = matchState.bowlingTeamObject;
+
+        if (bowlingTeam && bowlingTeam.players.length > 0) {
+            const lastBowler = matchState.bowlers.find(b => b.id === matchState.currentBowlerId);
+            let options = '<option value="">Select Bowler</option>';
+            bowlingTeam.players.forEach(p => {
+                if (!lastBowler || p.name !== lastBowler.name) {
+                    options += `<option value="${p.name}">${p.name}</option>`;
+                }
+            });
+            container.innerHTML = `<select id="new-bowler-select">${options}</select>`;
+        } else {
+            container.innerHTML = `<input type="text" id="new-bowler-input" placeholder="Enter new bowler's name">`;
+        }
+    }
+
+    function forceNewOver() {
+        if (!matchState.isOverComplete) {
+            showToast("Over is not yet complete.");
+            return;
+        }
+        renderNewBowlerSelection();
+        showModal('choose-bowler-modal');
+    }
+
+    function handleWicket() { if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } showModal('fall-of-wicket-modal'); }
+    function handleRetire() { if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } showModal('retire-modal'); }
+
+    function confirmNewBatsman(type) {
+        saveState();
+        const ci = matchState.innings[matchState.currentInnings]; const outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); let newName;
+        if (type === 'wicket') {
+            const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId); ci.wickets++; if(cb) cb.wickets++; ci.balls++; if(cb) cb.balls++;
+            if(outBatsman) { outBatsman.out = true; outBatsman.onStrike = false; }
+            matchState.thisOver.push('W'); newName = document.getElementById('new-batsman-input-wicket').value; closeModal('fall-of-wicket-modal');
+            if(ci.balls > 0 && ci.balls % 6 === 0) { matchState.isOverComplete = true; swapBatsmen(); }
+        } else { if(outBatsman) { outBatsman.retired = true; outBatsman.onStrike = false; } newName = document.getElementById('new-batsman-input-retire').value; closeModal('retire-modal'); }
+        if (!newName) { showToast("Please enter new batsman's name."); renderScorecard(); return; }
+        const newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
+        matchState.batsmen.push(newBatsman); ci.allBatsmen.push(newBatsman);
+        const nonStriker = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
+        matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [newName, nonStriker ? nonStriker.name : ''] };
+        if (isGameOver()) { handleInningsEnd(); }
+        else { renderScorecard(); }
+    }
+
+    function isGameOver() {
+        const ci = matchState.innings[matchState.currentInnings]; const totalBalls = matchState.settings.totalOvers * 6;
+        if (ci.wickets >= matchState.settings.playersPerTeam - 1 || ci.balls >= totalBalls) return true;
+        if (matchState.currentInnings === 2 && matchState.target && ci.score >= matchState.target) return true;
+        return false;
+    }
+
+    function handleInningsEnd() {
+        localStorage.removeItem('inProgressMatch'); // Match finished, remove backup
+        if(matchState.currentInnings === 1) {
+            matchState.target = matchState.innings[1].score + 1;
+            document.getElementById('innings-break-target').innerText = `${matchState.bowlingTeam} needs ${matchState.target} runs to win.`;
+            showModal('innings-break-modal');
+        } else {
+             const i1 = matchState.innings[1]; const i2 = matchState.innings[2];
+             if (i2.score >= matchState.target) { const wicketsLeft = matchState.settings.playersPerTeam - 1 - i2.wickets; matchState.result = `${i2.team} won by ${wicketsLeft} wickets.`; }
+             else if (i2.score === i1.score) { matchState.result = "Match Draw."; }
+             else { const runDiff = i1.score - i2.score; matchState.result = `${i1.team} won by ${runDiff} runs.`; }
+
+             matchState.completionDate = new Date().toISOString();
+             updatePlayerStats(matchState);
+             updateTournamentPoints(matchState);
+             appData.history.push(JSON.parse(JSON.stringify(matchState)));
+             saveData();
+             renderScorecard();
+             setTimeout(() => {
+                alert(matchState.result);
+                renderMatchSummary(matchState);
+                navigate('match-summary-screen');
+             }, 100);
+        }
+    }
+
+    function updatePlayerStats(matchData) {
+        const findGlobalPlayer = (playerName) => {
+            for (const team of appData.teams) {
+                const player = team.players.find(p => p.name.trim().toLowerCase() === playerName.trim().toLowerCase());
+                if (player) return player;
+            }
+            return null;
+        };
+        const processedPlayerIDs = new Set();
+        const processPlayerList = (playerList, type) => {
+            playerList.forEach(playerPerf => {
+                const playerProfile = findGlobalPlayer(playerPerf.name);
+                if (playerProfile) {
+                    if (!playerProfile.stats) {
+                        playerProfile.stats = { matches: 0, batting: { runs: 0, balls: 0, fours: 0, sixes: 0 }, bowling: { balls: 0, runs: 0, wickets: 0, maidens: 0 } };
+                    }
+                    if (!processedPlayerIDs.has(playerProfile.id)) {
+                        playerProfile.stats.matches = (playerProfile.stats.matches || 0) + 1;
+                        processedPlayerIDs.add(playerProfile.id);
+                    }
+                    if (type === 'batsman') {
+                        const stats = playerProfile.stats.batting || { runs: 0, balls: 0, fours: 0, sixes: 0 };
+                        stats.runs += playerPerf.runs;
+                        stats.balls += playerPerf.balls;
+                        stats.fours += playerPerf.fours;
+                        stats.sixes += playerPerf.sixes;
+                        playerProfile.stats.batting = stats;
+                    } else if (type === 'bowler') {
+                        const stats = playerProfile.stats.bowling || { balls: 0, runs: 0, wickets: 0, maidens: 0 };
+                        stats.balls += playerPerf.balls;
+                        stats.runs += playerPerf.runs;
+                        stats.wickets += playerPerf.wickets;
+                        stats.maidens += playerPerf.maidens;
+                        playerProfile.stats.bowling = stats;
+                    }
+                }
+            });
+        };
+        processPlayerList(matchData.innings[1].allBatsmen, 'batsman');
+        processPlayerList(matchData.innings[2].allBatsmen, 'batsman');
+        processPlayerList(matchData.innings[1].allBowlers, 'bowler');
+        processPlayerList(matchData.innings[2].allBowlers, 'bowler');
+    }
+
+    function showSecondInningsPlayersScreen() {
+        closeModal('innings-break-modal');
+        matchState.currentInnings = 2;
+        [matchState.battingTeam, matchState.bowlingTeam] = [matchState.bowlingTeam, matchState.battingTeam];
+        [matchState.battingTeamObject, matchState.bowlingTeamObject] = [matchState.bowlingTeamObject, matchState.battingTeamObject];
+
+        renderOpeningPlayerSelection(matchState.battingTeamObject, matchState.bowlingTeamObject);
+
+        matchState.batsmen = [];
+        matchState.bowlers = [];
+        matchState.thisOver = [];
+        matchState.currentBowlerId = null;
+        matchState.isOverComplete = false;
+        matchState.pendingRun = null;
+        matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [] };
+        matchState.currentExtra = null;
+
+        document.getElementById('select-players-header').innerText = `Select Players - ${matchState.battingTeam}`;
+        document.getElementById('start-innings-btn').innerText = "Start 2nd Innings";
+        navigateReplace('select-opening-players-screen');
+    }
+
+    function addPenaltyRuns() { saveState(); const runs = parseInt(document.getElementById('penalty-run-input').value); if(runs > 0) matchState.innings[matchState.currentInnings].score += runs; closeModal('penalty-run-modal'); renderScorecard(); }
+    function showPartnership() { showToast(`Partnership: ${matchState.currentPartnership.runs} (${matchState.currentPartnership.balls} balls)`); }
+    function showExtras() { const extras = matchState.innings[matchState.currentInnings].extras; showToast(`Extras: ${extras.total} (Wd: ${extras.wd}, Nb: ${extras.nb}, B: ${extras.byes}, Lb: ${extras.lb})`); }
+
+    // --- UI RENDERING ---
+    function renderScorecard() {
+        const ci = matchState.innings[matchState.currentInnings]; const overs = Math.floor(ci.balls / 6), ballsThisOver = ci.balls % 6;
+        document.getElementById('scoreboard-main').innerText = `${ci.score}/${ci.wickets} (${overs}.${ballsThisOver})`;
+        document.getElementById('scorecard-header-teams').innerText = `${matchState.battingTeam} vs ${matchState.bowlingTeam}`;
+        const crr = ci.balls > 0 ? (ci.score / (ci.balls / 6 || 1)).toFixed(2) : '0.00'; let detailsText = `CRR: ${crr}`;
+        if(matchState.currentInnings === 2) {
+            const ballsRem = (matchState.settings.totalOvers * 6) - ci.balls; const runsNeeded = matchState.target - ci.score;
+            detailsText = `Target: ${matchState.target} | Need ${runsNeeded > 0 ? runsNeeded : 0} in ${ballsRem > 0 ? ballsRem : 0} balls`;
+            if (matchState.result) {
+                document.getElementById('new-match-from-scorecard-btn').style.display = 'flex';
+            }
+        } else { document.getElementById('new-match-from-scorecard-btn').style.display = 'none'; }
+        document.getElementById('scoreboard-details').innerText = detailsText;
+        document.getElementById('batsman-table').innerHTML = matchState.batsmen.filter(b => !b.out && !b.retired).map(b => { const sr = b.balls > 0 ? (b.runs / b.balls * 100).toFixed(2) : '0.00'; return `<tr><td>${b.name} ${b.onStrike ? '🏏' : ''}</td><td>${b.runs}</td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td>${sr}</td></tr>`; }).join('');
+        const bowler = matchState.bowlers.find(b => b.id === matchState.currentBowlerId);
+        if (bowler) { const bowlerOvers = `${Math.floor(bowler.balls / 6)}.${bowler.balls % 6}`; const er = bowler.balls > 0 ? (bowler.runs / (bowler.balls/6 || 1)).toFixed(2) : '0.00'; document.getElementById('bowler-table').innerHTML = `<tr><td>${bowler.name}</td><td>${bowlerOvers}</td><td>${bowler.maidens}</td><td>${bowler.runs}</td><td>${bowler.wickets}</td><td>${er}</td></tr>`; }
+        else { document.getElementById('bowler-table').innerHTML = ''; }
+
+        const thisOverContainer = document.getElementById('this-over-display');
+        thisOverContainer.innerHTML = '';
+        matchState.thisOver.forEach(ball => {
+            const ballElement = document.createElement('span');
+            ballElement.className = 'ball-event';
+            if (String(ball).toUpperCase().includes('W')) {
+                ballElement.classList.add('wicket');
+            }
+            ballElement.textContent = ball;
+            thisOverContainer.appendChild(ballElement);
+        });
+
+        document.getElementById('new-over-btn').classList.toggle('alert', matchState.isOverComplete);
+
+        // ** MODIFIED: Publish score updates to viewers **
+        publishPublicData();
+    }
+
+    function renderMatchSummary(sourceMatch = matchState) {
+        const contentWrapper = document.getElementById('summary-content-wrapper');
+        contentWrapper.dataset.matchId = sourceMatch.id; // Correctly set the match ID
+        const content = document.getElementById('summary-content');
+        content.innerHTML = '';
+
+        const renderInning = (inningNum) => {
+            const inning = sourceMatch.innings[inningNum];
+            if (!inning || !inning.team) return '';
+            let inningHTML = `<div class="card">
+                <h3>${inning.team} - ${inning.score}/${inning.wickets} (${Math.floor(inning.balls/6)}.${inning.balls%6} Overs)</h3>`;
+
+            inningHTML += `<h4>Batting</h4><div class="table-responsive"><table class="score-table"><thead><tr><th>Batsman</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>`;
+            inning.allBatsmen.forEach(b => {
+                 const sr = b.balls > 0 ? (b.runs / b.balls * 100).toFixed(2) : '0.00';
+                 inningHTML += `<tr><td>${b.name}</td><td>${b.runs}</td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td>${sr}</td></tr>`;
+            });
+            inningHTML += `<tr><td><strong>Extras</strong></td><td colspan="5">${inning.extras.total} (Wd:${inning.extras.wd}, Nb:${inning.extras.nb}, B:${inning.extras.byes}, Lb:${inning.extras.lb})</td></tr></tbody></table></div>`;
+
+            const opponentInning = sourceMatch.innings[inningNum === 1 ? 2 : 1];
+            if(opponentInning && opponentInning.allBowlers && opponentInning.allBowlers.length > 0) {
+                inningHTML += `<br><h4>Bowling</h4><div class="table-responsive"><table class="score-table"><thead><tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead><tbody>`;
+                opponentInning.allBowlers.forEach(b => {
+                    const bowlerOvers = `${Math.floor(b.balls / 6)}.${b.balls % 6}`;
+                    const er = b.balls > 0 ? (b.runs / (b.balls / 6 || 1)).toFixed(2) : '0.00';
+                    inningHTML += `<tr><td>${b.name}</td><td>${bowlerOvers}</td><td>${b.maidens}</td><td>${b.runs}</td><td>${b.wickets}</td><td>${er}</td></tr>`;
+                });
+                inningHTML += `</tbody></table></div>`;
+            }
+            inningHTML += `</div>`;
+            return inningHTML;
+        }
+
+        content.innerHTML += renderInning(1);
+        if(sourceMatch.innings[2].balls > 0 || sourceMatch.innings[2].score > 0 || sourceMatch.result) {
+            content.innerHTML += renderInning(2);
+        }
+
+        if (sourceMatch.result) {
+            content.innerHTML += `<div class="card" style="text-align: center; background: var(--accent-color); color: white;"><h3>${sourceMatch.result}</h3></div>`;
+        }
+    }
+
+     // --- HISTORY ---
+    function renderHistoryList() {
+        const content = document.getElementById('history-content');
+        content.innerHTML = '';
+        if (!appData.history || appData.history.length === 0) {
+            content.innerHTML = '<div class="card"><p>No completed matches found in history.</p></div>';
+            return;
+        }
+
+        const reversedHistory = [...appData.history].reverse();
+        reversedHistory.forEach(match => {
+            const matchCard = document.createElement('div');
+            matchCard.className = 'card';
+
+            const date = match.completionDate
+                ? new Date(match.completionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : 'Date not available';
+
+            matchCard.innerHTML = `
+                <div class="history-item-header">
+                    <h4>${match.innings[1].team} vs ${match.innings[2].team}</h4>
+                    <span class="date">${date}</span>
+                </div>
+                <div class="history-item-body">
+                    <p>${match.result}</p>
+                    <div class="btn-group" style="margin-top: 8px;">
+                        <button class="btn btn-secondary" onclick="viewHistoricMatch('${match.id}')">Scoreboard</button>
+                    </div>
+                </div>
+                <button class="icon-button" style="position: absolute; top: 8px; right: 8px; color: var(--danger-color);" onclick="event.stopPropagation(); deleteHistoryItem('${match.id}');">
+                    <i class="material-icons">delete</i>
+                </button>
+            `;
+            content.appendChild(matchCard);
+        });
+    }
+
+    function viewHistoricMatch(matchId) {
+        const historicMatch = appData.history.find(m => m.id === matchId);
+        if (historicMatch) {
+            renderMatchSummary(historicMatch);
+            navigate('match-summary-screen');
+        } else {
+            showToast('Could not find match data.');
+        }
+    }
+
+    function deleteHistoryItem(matchId) {
+        showConfirmationModal("Delete this match from history?", () => {
+            appData.history = appData.history.filter(m => m.id !== matchId);
+            saveData();
+            renderHistoryList();
+            showToast("Match deleted from history.");
+        });
+    }
+
+    // --- TOURNAMENT ---
+    function resetTournamentState() { tournamentState = { groups: { A: [], B: [], C: [], D: [] }, fixtures: { group: [], quarter: [], semi: [], final: [] }, points: {}, results: {} }; }
+
+    function renderTournamentFixtures() {
+        const content = document.getElementById('tournament-content-wrapper');
+        const saveBtnContainer = document.getElementById('tournament-save-btn-container');
+        const fixtureHTML = `<div class="card"><h3>Groups</h3>
+                ${['A', 'B', 'C', 'D'].map(group => `<div class="form-group"><label>Group ${group}</label><div id="group-${group}-teams"></div><div class="add-btn" onclick="addTeamInput('${group}')"><i class="material-icons">add</i> Add Team</div></div>`).join('')}
+            </div>
+            ${createFixtureSection('Group Stage', 'group')} ${createFixtureSection('Quarter Final Stage', 'quarter')}
+            ${createFixtureSection('Semi Final Stage', 'semi')} ${createFixtureSection('Final Stage', 'final')}`;
+        content.innerHTML = fixtureHTML;
+        ['A', 'B', 'C', 'D'].forEach(group => renderGroupTeamInputs(group));
+        ['group', 'quarter', 'semi', 'final'].forEach(stage => renderMatchRows(stage));
+        saveBtnContainer.style.display = 'block';
+    }
+
+    function createFixtureSection(title, stageKey) { return `<div class="card"><h3>${title}</h3><div id="${stageKey}-stage-matches"></div><div class="add-btn" onclick="addMatchRow('${stageKey}')"><i class="material-icons">add</i> Add Match</div></div>`; }
+    function renderGroupTeamInputs(group) {
+        const container = document.getElementById(`group-${group}-teams`); if(!container) return; if(!tournamentState.groups || !tournamentState.groups[group]) tournamentState.groups[group] = [];
+        container.innerHTML = tournamentState.groups[group].map((teamName, index) => `<input type="text" value="${teamName}" oninput="updateTeamName('${group}', ${index}, this.value)" placeholder="Enter Team Name" style="margin-bottom: 8px;">`).join('');
+    }
+    function addTeamInput(group) { if(!tournamentState.groups) tournamentState.groups = {}; if(!tournamentState.groups[group]) tournamentState.groups[group] = []; tournamentState.groups[group].push(''); renderGroupTeamInputs(group); }
+    function updateTeamName(group, index, name) { tournamentState.groups[group][index] = name; updateAllFixtureDropdowns(); }
+    function addMatchRow(stageKey) { if(!tournamentState.fixtures[stageKey]) tournamentState.fixtures[stageKey] = []; tournamentState.fixtures[stageKey].push({ team1: '', team2: '', played: false }); renderMatchRows(stageKey); }
+    function renderMatchRows(stageKey) {
+        const container = document.getElementById(`${stageKey}-stage-matches`); if (!container) return; if (!tournamentState.fixtures[stageKey]) tournamentState.fixtures[stageKey] = [];
+        container.innerHTML = tournamentState.fixtures[stageKey].map((match, index) => `<div class="match-row">${createTeamDropdown(stageKey, index, 'team1')}<span>vs</span>${createTeamDropdown(stageKey, index, 'team2')}</div>`).join('');
+    }
+    function updateAllFixtureDropdowns() { ['group', 'quarter', 'semi', 'final'].forEach(stageKey => { const container = document.getElementById(`${stageKey}-stage-matches`); if (container) renderMatchRows(stageKey); }); }
+    function getTeamOptions() { return [...new Set(Object.values(tournamentState.groups || {}).flat().filter(Boolean))]; }
+    function createTeamDropdown(stageKey, matchIndex, teamKey) {
+        const teams = getTeamOptions(); const selectedTeam = tournamentState.fixtures[stageKey][matchIndex][teamKey];
+        let optionsHTML = '<option value="">Select Team</option>';
+        teams.forEach(team => { optionsHTML += `<option value="${team}" ${team === selectedTeam ? 'selected' : ''}>${team}</option>`; });
+        return `<select onchange="updateMatchTeam('${stageKey}', ${matchIndex}, '${teamKey}', this.value)">${optionsHTML}</select>`;
+    }
+    function updateMatchTeam(stageKey, matchIndex, teamKey, teamName) { tournamentState.fixtures[stageKey][matchIndex][teamKey] = teamName; }
+    function renderPointsTable() {
+        const content = document.getElementById('tournament-content-wrapper');
+        const saveBtnContainer = document.getElementById('tournament-save-btn-container');
+        let tableHTML = '';
+        for (const group of ['A', 'B', 'C', 'D']) {
+            const teams = (tournamentState.groups && tournamentState.groups[group]) ? tournamentState.groups[group].filter(Boolean) : [];
+            if (teams.length > 0) {
+                if (!tournamentState.points) tournamentState.points = {}; if (!tournamentState.points[group]) tournamentState.points[group] = {};
+                tableHTML += `<div class="card"><h3>Points Table - Group ${group}</h3><div class="table-responsive"><table class="points-table">
+                    <thead><tr><th>Team</th><th>P</th><th>W</th><th>L</th><th>Pts</th><th>NRR</th></tr></thead><tbody>`;
+                teams.forEach(team => {
+                    if (!tournamentState.points[group][team]) tournamentState.points[group][team] = { p: 0, w: 0, l: 0, pts: 0, nrr: '' };
+                    const teamData = tournamentState.points[group][team];
+                    tableHTML += `<tr>
+                        <td>${team}</td>
+                        <td><input type="number" value="${teamData.p}" oninput="updatePointsData('${group}', '${team}', 'p', this.value)"></td>
+                        <td><input type="number" value="${teamData.w}" oninput="updatePointsData('${group}', '${team}', 'w', this.value)"></td>
+                        <td><input type="number" value="${teamData.l}" oninput="updatePointsData('${group}', '${team}', 'l', this.value)"></td>
+                        <td><input type="number" value="${teamData.pts}" oninput="updatePointsData('${group}', '${team}', 'pts', this.value)"></td>
+                        <td><input type="text" value="${teamData.nrr}" oninput="updatePointsData('${group}', '${team}', 'nrr', this.value)"></td>
+                    </tr>`;
+                });
+                tableHTML += `</tbody></table></div></div>`;
+            }
+        }
+        content.innerHTML = tableHTML || '<div class="card"><p>No teams added in Fixtures tab.</p></div>';
+        saveBtnContainer.style.display = 'block';
+    }
+
+    function updatePointsData(group, team, key, value) {
+        if (!tournamentState.points) tournamentState.points = {}; if (!tournamentState.points[group]) tournamentState.points[group] = {};
+        if (!tournamentState.points[group][team]) tournamentState.points[group][team] = {};
+        tournamentState.points[group][team][key] = value;
+    }
+
+    function renderTournamentResults() {
+        const content = document.getElementById('tournament-content-wrapper');
+        const saveBtnContainer = document.getElementById('tournament-save-btn-container');
+        let resultsHTML = '';
+        for (const stage of ['group', 'quarter', 'semi', 'final']) {
+            if (!tournamentState.fixtures || !tournamentState.fixtures[stage]) continue;
+            const matches = tournamentState.fixtures[stage].filter(m => m.team1 && m.team2);
+            if (matches.length > 0) {
+                const stageTitle = stage.charAt(0).toUpperCase() + stage.slice(1) + ' Stage Results';
+                resultsHTML += `<div class="card"><h3>${stageTitle}</h3>`;
+                matches.forEach((match, index) => {
+                    const resultId = `${stage}-${index}`;
+                    const resultData = (tournamentState.results && tournamentState.results[resultId]) ? tournamentState.results[resultId] : { score1: '', score2: '', summary: '', dateTime: '' };
+                    resultsHTML += `<div class="result-match-item">
+                        <div style="margin-bottom: 10px;">
+                           <input type="text" class="date-time-input" placeholder="Enter Date & Time" value="${resultData.dateTime || ''}" oninput="updateResult('${resultId}', 'dateTime', this.value)">
+                        </div>
+                        <div class="score-entry-row">
+                            <span class="team-name">${match.team1}</span>
+                            <input type="text" class="score-input" placeholder="Score/Wkts" value="${resultData.score1}" oninput="updateResult('${resultId}', 'score1', this.value)">
+                        </div>
+                        <div class="score-entry-row">
+                            <span class="team-name">${match.team2}</span>
+                            <input type="text" class="score-input" placeholder="Score/Wkts" value="${resultData.score2}" oninput="updateResult('${resultId}', 'score2', this.value)">
+                        </div>
+                        <textarea class="summary-input" placeholder="Write result summary..." oninput="updateResult('${resultId}', 'summary', this.value)">${resultData.summary}</textarea>
+                    </div>`;
+                });
+                resultsHTML += `</div>`;
+            }
+        }
+        content.innerHTML = resultsHTML || '<div class="card"><p>No matches set in Fixtures tab.</p></div>';
+        saveBtnContainer.style.display = 'block';
+    }
+    function updateResult(resultId, key, value) {
+        if(!tournamentState.results) tournamentState.results = {};
+        if (!tournamentState.results[resultId]) {
+            tournamentState.results[resultId] = { score1: '', score2: '', summary: '', dateTime: '' };
+        }
+        tournamentState.results[resultId][key] = value;
+    }
+
+    // --- Tournament Points Auto-Update Functions ---
+    function findTeamGroup(teamName) {
+        if (!tournamentState.groups) return null;
+        for (const group in tournamentState.groups) {
+            if (tournamentState.groups[group].includes(teamName)) {
+                return group;
+            }
+        }
+        return null;
+    }
+
+    function updateTeamPointsInTable(teamName, groupName, isWin, isDraw) {
+        if (!groupName || !tournamentState.points || !tournamentState.points[groupName]) return;
+        if (!tournamentState.points[groupName][teamName]) {
+            tournamentState.points[groupName][teamName] = { p: 0, w: 0, l: 0, pts: 0, nrr: '' };
+        }
+        const teamData = tournamentState.points[groupName][teamName];
+        teamData.p = (parseInt(teamData.p) || 0) + 1;
+        if (isWin) {
+            teamData.w = (parseInt(teamData.w) || 0) + 1;
+            teamData.pts = (parseInt(teamData.pts) || 0) + 2;
+        } else if (isDraw) {
+            teamData.pts = (parseInt(teamData.pts) || 0) + 1;
+        } else {
+            teamData.l = (parseInt(teamData.l) || 0) + 1;
+        }
+    }
+
+    function updateTournamentPoints(completedMatch) {
+        const team1 = completedMatch.innings[1].team;
+        const team2 = completedMatch.innings[2].team;
+        if (!tournamentState.fixtures) return;
+
+        let fixtureFound = null;
+        let fixtureStage = null;
+        for (const stage in tournamentState.fixtures) {
+            const fixtureIndex = tournamentState.fixtures[stage].findIndex(f =>
+                !f.played && ((f.team1 === team1 && f.team2 === team2) || (f.team1 === team2 && f.team2 === team1))
+            );
+            if (fixtureIndex !== -1) {
+                fixtureFound = tournamentState.fixtures[stage][fixtureIndex];
+                fixtureStage = stage;
+                break;
+            }
+        }
+
+        if (!fixtureFound) return;
+
+        let winner = null, loser = null, isDraw = false;
+        if (completedMatch.result.includes('Draw')) {
+            isDraw = true;
+        } else if (completedMatch.result.includes('won by')) {
+            winner = completedMatch.result.startsWith(team1) ? team1 : team2;
+            loser = (winner === team1) ? team2 : team1;
+        } else {
+            return;
+        }
+
+        if (fixtureStage === 'group') {
+            const group1 = findTeamGroup(team1);
+            const group2 = findTeamGroup(team2);
+
+            if (group1 && group2) {
+                 if (isDraw) {
+                    updateTeamPointsInTable(team1, group1, false, true);
+                    updateTeamPointsInTable(team2, group2, false, true);
+                 } else {
+                    updateTeamPointsInTable(winner, group1, true, false);
+                    updateTeamPointsInTable(loser, group2, false, false);
+                 }
+                 fixtureFound.played = true;
+                 saveData();
+                 showToast('Tournament points updated!');
+            }
+        }
+    }
+
+    function handleLogin() {
+        const passwordInput = document.getElementById('login-password-input');
+        if (passwordInput.value === 'carnival') {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+            signInAnonymously(); // Initialize app and Firebase after successful login
+        } else {
+            showToast("Incorrect Access Code!");
+            passwordInput.value = '';
+        }
+    }
+
+    // --- PDF DOWNLOAD & Initial setup ---
+    document.addEventListener('DOMContentLoaded', ()=> {
+        document.getElementById('login-btn').addEventListener('click', handleLogin);
+        document.getElementById('login-password-input').addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                handleLogin();
+            }
+        });
+
+        document.getElementById('full-scorecard-btn').addEventListener('click', () => {
+            renderMatchSummary(matchState);
+            navigate('match-summary-screen');
+        });
+
+        document.getElementById('tournament-nav').addEventListener('click', (e) => {
+            const tabItem = e.target.closest('.nav-item'); if (!tabItem) return;
+            document.querySelectorAll('#tournament-nav .nav-item').forEach(i => i.classList.remove('active'));
+            tabItem.classList.add('active');
+            const tab = tabItem.dataset.tab;
+            const saveBtnContainer = document.getElementById('tournament-save-btn-container');
+            if (tab === 'fixtures') { renderTournamentFixtures(); saveBtnContainer.style.display = 'block'; }
+            if (tab === 'points') { renderPointsTable(); saveBtnContainer.style.display = 'block'; }
+            if (tab === 'results') { renderTournamentResults(); saveBtnContainer.style.display = 'block'; }
+        });
+
+        const downloadBtn = document.getElementById('download-pdf-btn');
+        if (downloadBtn) {
+             downloadBtn.addEventListener('click', () => {
+                const { jsPDF } = window.jspdf;
+                const contentToCapture = document.getElementById('summary-content');
+                const contentWrapper = document.getElementById('summary-content-wrapper'); // Get the wrapper
+
+                if(!contentToCapture) {
+                    showToast("Cannot find scorecard content.");
+                    return;
+                }
+                const originalBtnText = downloadBtn.innerHTML;
+                downloadBtn.innerHTML = 'Downloading...';
+                downloadBtn.disabled = true;
+
+                html2canvas(contentToCapture, { scale: 2, useCORS: true })
+                    .then(canvas => {
+                        const imgData = canvas.toDataURL('image/png');
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = pdf.internal.pageSize.getHeight();
+                        const canvasWidth = canvas.width;
+                        const canvasHeight = canvas.height;
+                        const ratio = canvasWidth / canvasHeight;
+                        const imgWidth = pdfWidth - 20;
+                        const imgHeight = imgWidth / ratio;
+
+                        let heightLeft = imgHeight;
+                        let position = 10;
+
+                        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                        heightLeft -= (pdfHeight - 20);
+
+                        while (heightLeft > 0) {
+                            position = heightLeft * -1;
+                            pdf.addPage();
+                            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                            heightLeft -= (pdfHeight - 20);
+                        }
+                        
+                        // **FIXED LOGIC**
+                        // Find the match from history if a matchId is set on the wrapper, otherwise use the live matchState
+                        const displayedMatch = appData.history.find(m => m.id === contentWrapper.dataset.matchId) || matchState;
+
+                        const team1 = (displayedMatch && displayedMatch.innings && displayedMatch.innings[1]) ? displayedMatch.innings[1].team : 'TeamA';
+                        const team2 = (displayedMatch && displayedMatch.innings && displayedMatch.innings[2]) ? displayedMatch.innings[2].team : 'TeamB';
+                        pdf.save(`Scorecard_${team1}_vs_${team2}.pdf`);
+
+                        downloadBtn.innerHTML = originalBtnText;
+                        downloadBtn.disabled = false;
+                        showToast("PDF Downloaded!");
+                    })
+                    .catch(err => {
+                        console.error("PDF generation failed", err);
+                        showToast("Failed to generate PDF. Please try again.");
+                        downloadBtn.innerHTML = originalBtnText;
+                        downloadBtn.disabled = false;
+                    });
+            });
+        }
+    });
+</script>
+</body>
+</html>
