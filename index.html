@@ -69,10 +69,26 @@
             margin-top: 0;
             color: var(--primary-dark-color);
         }
-        #login-box .form-group input {
-            text-align: center;
-            font-size: 16px;
+        /* --- *** UPDATED LOGIN FORM STYLES *** --- */
+        #login-box .form-group {
+            margin-bottom: 16px;
+            text-align: left;
         }
+        #login-box .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #7f8c8d;
+        }
+        #login-box .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--divider-color);
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        /* --- *** END UPDATED STYLES *** --- */
+
 
         /* Screen Management & Transitions */
         .screen {
@@ -496,12 +512,16 @@
         <div id="login-box">
             <h2>Admin Login</h2>
             <div class="form-group">
-                <input type="password" id="login-password-input" placeholder="Enter Access Code">
+                <label for="login-email-input">Email</label>
+                <input type="email" id="login-email-input" value="jahid2177@gmail.com">
+            </div>
+            <div class="form-group">
+                <label for="login-password-input">Password</label>
+                <input type="password" id="login-password-input" placeholder="Enter Password">
             </div>
             <button class="btn" id="login-btn">Login</button>
         </div>
     </div>
-
     <div id="app-container" style="display: none;">
         <div id="new-match-screen" class="screen active">
             <header class="app-header"></header>
@@ -950,26 +970,29 @@
         }
     }
 
-    // Firebase Anonymous Authentication
-    function signInAnonymously() {
+    // *** START: NEW FUNCTION 1 ***
+    // Checks if user is already logged in on page load
+    function checkAuthState() {
       auth.onAuthStateChanged(async user => {
         if (user) {
+          // User is already signed in
           currentUser = user;
-          console.log("Signed in with UID:", currentUser.uid);
-          await loadData(); // Load data after user is authenticated
-          checkForInProgressMatch(); // Check for incomplete match after loading main data
+          console.log("User already signed in:", currentUser.uid);
+          
+          document.getElementById('login-overlay').style.display = 'none';
+          document.getElementById('app-container').style.display = 'block';
+          
+          await loadData(); // Load their data
+          checkForInProgressMatch();
         } else {
-          auth.signInAnonymously().catch(error => {
-            console.error("Anonymous sign-in failed:", error);
-            // If sign-in fails, still load from local storage and check for incomplete match
-            loadAppDataFromLocal();
-            loadTournamentDataFromLocal();
-            renderInitialUI();
-            checkForInProgressMatch();
-          });
+          // User is signed out, do nothing.
+          // The login overlay is visible by default.
+          console.log("User is signed out.");
         }
       });
     }
+    // *** END: NEW FUNCTION 1 ***
+
 
     function checkForInProgressMatch() {
         const inProgressMatchData = localStorage.getItem('inProgressMatch');
@@ -1871,20 +1894,55 @@
         }
     }
 
+    // *** START: NEW FUNCTION 2 ***
+    // This function runs when the "Login" button is clicked
     function handleLogin() {
+        const emailInput = document.getElementById('login-email-input');
         const passwordInput = document.getElementById('login-password-input');
-        if (passwordInput.value === 'carnival') {
-            document.getElementById('login-overlay').style.display = 'none';
-            document.getElementById('app-container').style.display = 'block';
-            signInAnonymously(); // Initialize app and Firebase after successful login
-        } else {
-            showToast("Incorrect Access Code!");
-            passwordInput.value = '';
+        const email = emailInput.value.trim();
+        const password = passwordInput.value; // Don't trim password
+
+        if (!email || !password) {
+            showToast("Please enter both email and password.");
+            return;
         }
+
+        // Sign in with Firebase
+        auth.signInWithEmailAndPassword(email, password)
+            .then(async (userCredential) => {
+                // Sign-in successful.
+                currentUser = userCredential.user;
+                console.log("Admin sign-in successful:", currentUser.uid);
+                
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
+                
+                await loadData(); // Load data after successful login
+                checkForInProgressMatch();
+            })
+            .catch(error => {
+                // Handle Errors
+                console.error("Admin sign-in failed:", error);
+                // এই কোডটি পাসওয়ার্ড ভুল হলে দেখাবে
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                    showToast("Incorrect Email or Password!");
+                } else {
+                    showToast("Login failed. Check internet.");
+                }
+                passwordInput.value = '';
+            });
     }
+    // *** END: NEW FUNCTION 2 ***
 
     // --- PDF DOWNLOAD & Initial setup ---
     document.addEventListener('DOMContentLoaded', ()=> {
+        
+        // *** START: NEW AUTHENTICATION CHECK ***
+        // Check if the user is already logged in when the page loads
+        checkAuthState();
+        // *** END: NEW AUTHENTICATION CHECK ***
+
+
         document.getElementById('login-btn').addEventListener('click', handleLogin);
         document.getElementById('login-password-input').addEventListener('keyup', (event) => {
             if (event.key === 'Enter') {
