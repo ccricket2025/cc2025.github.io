@@ -1323,8 +1323,8 @@
         matchState.batsmen = [striker, nonStriker]; ci.allBatsmen.push(striker, nonStriker);
         matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [striker.name, nonStriker.name] };
         const newBowler = { id: generateUniqueId(), name: bowlerName, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 };
-        matchState.bowlers.push(newBowler); opponentInning.allBowlers.push(newBowler);
-        matchState.currentBowlerId = newBowler.id;
+        matchState.bowlers.push(newBowler); ci.allBowlers.push(newBowler);
+        matchState.currentBowlerId = newBowler.id;
         renderScorecard(); navigateReplace('scorecard-screen');
     }
 
@@ -1440,12 +1440,12 @@
 
         if(!bowlerName) { showToast("Please select/enter a bowler name."); return; }
 
-        const opponentInning = matchState.innings[matchState.currentInnings === 1 ? 2 : 1];
-        let bowler = opponentInning.allBowlers.find(b => b.name === bowlerName);
-        if(!bowler) {
-            bowler = { id: generateUniqueId(), name: bowlerName, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 };
-            opponentInning.allBowlers.push(bowler);
-        }
+        const ci = matchState.innings[matchState.currentInnings];
+        let bowler = ci.allBowlers.find(b => b.name === bowlerName);
+        if(!bowler) {
+            bowler = { id: generateUniqueId(), name: bowlerName, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 };
+            ci.allBowlers.push(bowler);
+        }
         matchState.bowlers = [bowler];
         matchState.currentBowlerId = bowler.id;
         matchState.thisOver = [];
@@ -1663,10 +1663,10 @@
             });
             inningHTML += `<tr><td><strong>Extras</strong></td><td colspan="5">${inning.extras.total} (Wd:${inning.extras.wd}, Nb:${inning.extras.nb}, B:${inning.extras.byes}, Lb:${inning.extras.lb})</td></tr></tbody></table></div>`;
 
-            const opponentInning = sourceMatch.innings[inningNum === 1 ? 2 : 1];
-            if(opponentInning && opponentInning.allBowlers && opponentInning.allBowlers.length > 0) {
-                inningHTML += `<br><h4>Bowling</h4><div class="table-responsive"><table class="score-table"><thead><tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead><tbody>`;
-                opponentInning.allBowlers.forEach(b => {
+            const opponentInning = sourceMatch.innings[inningNum === 1 ? 2 : 1]; // এই লাইনের আর দরকার নেই
+            if(inning && inning.allBowlers && inning.allBowlers.length > 0) {
+                inningHTML += `<br><h4>Bowling</h4><div class="table-responsive"><table class="score-table"><thead><tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead><tbody>`;
+                inning.allBowlers.forEach(b => {
                     const bowlerOvers = `${Math.floor(b.balls / 6)}.${b.balls % 6}`;
                     const er = b.balls > 0 ? (b.runs / (b.balls / 6 || 1)).toFixed(2) : '0.00';
                     // --- FIX 1: Changed bowler.maidens to b.maidens ---
@@ -1774,7 +1774,20 @@
                 final: []
             },
             points: {},
-            results: {}
+            results: {
+                'group-0': { dateTime: 'Nov 1, Time- 7:30 to 10:00', score1: '', score2: '', summary: '' },
+                'group-1': { dateTime: 'Nov 1, Time- 10:00 to 12:30', score1: '', score2: '', summary: '' },
+                'group-2': { dateTime: 'Nov 1, Time- 12:30 to 3:00', score1: '', score2: '', summary: '' },
+                'group-3': { dateTime: 'Nov 7, Time- 7:30 to 10:00', score1: '', score2: '', summary: '' },
+                'group-4': { dateTime: 'Nov 7, Time- 10:00 to 12:30', score1: '', score2: '', summary: '' },
+                'group-5': { dateTime: 'Nov 7, Time- 12:30 to 3:00', score1: '', score2: '', summary: '' },
+                'group-6': { dateTime: 'Nov 8, Time- 7:30 to 10:00', score1: '', score2: '', summary: '' },
+                'group-7': { dateTime: 'Nov 8, Time- 10:00 to 12:30', score1: '', score2: '', summary: '' },
+                'group-8': { dateTime: 'Nov 8, Time- 12:30 to 3:00', score1: '', score2: '', summary: '' },
+                'group-9': { dateTime: 'Nov 14, Time- 7:30 to 10:00', score1: '', score2: '', summary: '' },
+                'group-10': { dateTime: 'Nov 14, Time- 10:00 to 12:30', score1: '', score2: '', summary: '' },
+                'group-11': { dateTime: 'Nov 1, Time- 12:30 to 3:00', score1: '', score2: '', summary: '' }
+            }
         };
         // --- END PRE-POPULATION ---
     }
