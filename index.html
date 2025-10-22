@@ -717,12 +717,12 @@
 <script>
     // --- FIREBASE SETUP ---
     const firebaseConfig = {
-      apiKey: "AIzaSyATq50_cv4xKiOcqO3oRGkCHLJs5w4QGn4",
-      authDomain: "cricket-scorer-edc3b.firebaseapp.com",
-      projectId: "cricket-scorer-edc3b",
-      storageBucket: "cricket-scorer-edc3b.firebasestorage.app",
-      messagingSenderId: "957496344269",
-      appId: "1:957496344269:web:2a793cde06ac430ef93384"
+      apiKey: "AIzaSyCV2XwcArssrHcgeGSruUGmU524ceSLwRk",
+      authDomain: "cricketcc.firebaseapp.com",
+      projectId: "cricketcc",
+      storageBucket: "cricketcc.firebasestorage.app",
+      messagingSenderId: "1067596696661",
+      appId: "1:1067596696661:web:e0b7943b002f075b7858dc"
     };
 
     // Initialize Firebase
@@ -877,10 +877,51 @@
 
     // --- Data Persistence (Firebase & Local Storage) ---
     function saveAppDataToLocal() { try { localStorage.setItem('cricketAppData', JSON.stringify(appData)); } catch (e) { console.error("Error saving app data to local", e); }}
+    
+    // --- MODIFIED FUNCTION ---
     function loadAppDataFromLocal() {
-        try { appData = JSON.parse(localStorage.getItem('cricketAppData')) || { teams: [], history: [] }; }
-        catch (e) { console.error("Error loading app data from local", e); appData = { teams: [], history: [] }; }
+        try {
+            // --- DATA PRE-POPULATION (TEAMS) ---
+            const defaultAppData = {
+                teams: [
+                    { id: generateUniqueId(), name: "Corporate Credit", players: [] },
+                    { id: generateUniqueId(), name: "Card Operation", players: [] },
+                    { id: generateUniqueId(), name: "ICT Operation", players: [] },
+                    { id: generateUniqueId(), name: "Dhaka South Zone", players: [] },
+                    { id: generateUniqueId(), name: "Narayangonj Zone", players: [] },
+                    { id: generateUniqueId(), name: "Dhaka Central Zone", players: [] },
+                    { id: generateUniqueId(), name: "Treasury", players: [] },
+                    { id: generateUniqueId(), name: "Card Business", players: [
+                    { id: generateUniqueId(), name: "N. M Feroz Kamal", stats: {} },
+                    { id: generateUniqueId(), name: "Zihad Hossain", stats: {} },
+                    { id: generateUniqueId(), name: "Md Jahidul Islam", stats: {} },
+                    { id: generateUniqueId(), name: "Md Belal Suman", stats: {} },
+                    { id: generateUniqueId(), name: "Md Mamun Pervez", stats: {} },
+                    { id: generateUniqueId(), name: "Hridoy Chakroborty", stats: {} },
+                    { id: generateUniqueId(), name: "Asraf Uddin", stats: {} },
+                    { id: generateUniqueId(), name: "Imran Shahriyar", stats: {} },
+                    { id: generateUniqueId(), name: "Assaduz Zaman", stats: {} },
+                    { id: generateUniqueId(), name: "Md. Jahidul Haque", stats: {} },
+                    { id: generateUniqueId(), name: "MD. SAMIUL HAQUE", stats: {} },
+                    { id: generateUniqueId(), name: "Md.Kajal Sheikh", stats: {} },
+                    { id: generateUniqueId(), name: "Prodip Chandra Banik", stats: {} },
+                    { id: generateUniqueId(), name: "J A Pranto", stats: {} },
+                    { id: generateUniqueId(), name: "MD. Ibnul Hasan", stats: {} }
+                     ] },
+                    { id: generateUniqueId(), name: "CAM & RD", players: [] },
+                    { id: generateUniqueId(), name: "ID", players: [] },
+                    { id: generateUniqueId(), name: "SDD", players: [] },
+                    { id: generateUniqueId(), name: "Principal", players: [] }
+                ],
+                history: []
+            };
+            // --- END PRE-POPULATION ---
+            appData = JSON.parse(localStorage.getItem('cricketAppData')) || defaultAppData;
+        }
+        catch (e) { console.error("Error loading app data from local", e); appData = { teams: [], history: [] }; } // Keep original fallback
     }
+    // --- END MODIFIED FUNCTION ---
+
     function saveTournamentDataToLocal() { try { localStorage.setItem('tournamentData', JSON.stringify(tournamentState)); } catch (e) { console.error("Error saving tournament data to local", e); }}
     function loadTournamentDataFromLocal() {
         try {
@@ -1703,7 +1744,41 @@
     }
 
     // --- TOURNAMENT ---
-    function resetTournamentState() { tournamentState = { groups: { A: [], B: [], C: [], D: [] }, fixtures: { group: [], quarter: [], semi: [], final: [] }, points: {}, results: {} }; }
+    // --- MODIFIED FUNCTION ---
+    function resetTournamentState() {
+        // --- DATA PRE-POPULATION (TOURNAMENT) ---
+        tournamentState = {
+            groups: {
+                A: ["Corporate Credit", "Card Operation", "ICT Operation"],
+                B: ["Dhaka South Zone", "Narayangonj Zone", "Dhaka Central Zone"],
+                C: ["Treasury", "Card Business", "CAM & RD"],
+                D: ["ID", "SDD", "Principal"]
+            },
+            fixtures: {
+                group: [
+                    { team1: 'ID', team2: 'Principal', played: false },
+                    { team1: 'Corporate Credit', team2: 'ICT Operation', played: false },
+                    { team1: 'CAM & RD', team2: 'Card Business', played: false },
+                    { team1: 'Dhaka Central Zone', team2: 'Dhaka South Zone', played: false },
+                    { team1: 'Card Operation', team2: 'ICT Operation', played: false },
+                    { team1: 'Card Business', team2: 'Treasury', played: false },
+                    { team1: 'Corporate Credit', team2: 'Card Operation', played: false },
+                    { team1: 'ID', team2: 'SDD', played: false },
+                    { team1: 'Dhaka South Zone', team2: 'Narayangonj Zone', played: false },
+                    { team1: 'Treasury', team2: 'CAM & RD', played: false },
+                    { team1: 'SDD', team2: 'Principal', played: false },
+                    { team1: 'Dhaka Central Zone', team2: 'Narayangonj Zone', played: false }
+                ],
+                quarter: [],
+                semi: [],
+                final: []
+            },
+            points: {},
+            results: {}
+        };
+        // --- END PRE-POPULATION ---
+    }
+    // --- END MODIFIED FUNCTION ---
 
     function renderTournamentFixtures() {
         const content = document.getElementById('tournament-content-wrapper');
