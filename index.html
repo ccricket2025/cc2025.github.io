@@ -1054,8 +1054,9 @@
                     }
                 },
                 () => { // onCancel
-                    localStorage.removeItem('inProgressMatch');
-                    showToast("Previous match discarded.");
+                    // User chose not to resume. The match data remains in localStorage
+                    // and will be visible in the History tab.
+                    showToast("Match not resumed. You can resume it from the History tab.");
                 }
             );
         }
@@ -1689,15 +1690,54 @@
     }
 
      // --- HISTORY ---
+     // --- *** MODIFIED FUNCTION *** ---
     function renderHistoryList() {
         const content = document.getElementById('history-content');
         content.innerHTML = '';
-        if (!appData.history || appData.history.length === 0) {
-            content.innerHTML = '<div class="card"><p>No completed matches found in history.</p></div>';
+        const inProgressMatchData = localStorage.getItem('inProgressMatch');
+        const reversedHistory = [...appData.history].reverse();
+
+        if (!inProgressMatchData && reversedHistory.length === 0) {
+            content.innerHTML = '<div class="card"><p>No completed or in-progress matches found.</p></div>';
             return;
         }
 
-        const reversedHistory = [...appData.history].reverse();
+        // Render In-Progress Match first
+        if (inProgressMatchData) {
+            try {
+                const match = JSON.parse(inProgressMatchData);
+                const matchCard = document.createElement('div');
+                matchCard.className = 'card';
+                matchCard.style.borderLeft = '4px solid var(--warning-color)'; // Highlight
+                matchCard.dataset.matchData = inProgressMatchData; // Store data on the element
+
+                const ci = match.innings[match.currentInnings];
+                const ci_num_text = match.currentInnings === 1 ? '1st' : '2nd';
+                const overs = `${Math.floor(ci.balls/6)}.${ci.balls%6}`;
+
+                matchCard.innerHTML = `
+                    <div class="history-item-header">
+                        <h4>${match.innings[1].team} vs ${match.innings[2].team}</h4>
+                        <span class="date" style="color: var(--warning-color); font-weight: 700;">IN PROGRESS</span>
+                    </div>
+                    <div class="history-item-body">
+                        <p style="color: var(--text-primary-color); font-weight: normal;">
+                            ${match.battingTeam} are ${ci.score}/${ci.wickets} (${overs}) - ${ci_num_text} Innings
+                        </p>
+                        <div class="btn-group" style="margin-top: 8px;">
+                            <button class="btn" style="background: var(--warning-color);" onclick="resumeMatchFromHistory(this.closest('.card').dataset.matchData)">Resume</button>
+                            <button class="btn" style="background: var(--danger-color);" onclick="event.stopPropagation(); deleteHistoryItem('inProgressMatch');">Discard</button>
+                        </div>
+                    </div>
+                `;
+                content.appendChild(matchCard);
+            } catch (e) {
+                console.error("Failed to parse in-progress match for history list.", e);
+                localStorage.removeItem('inProgressMatch'); // Clear corrupted data
+            }
+        }
+
+        // Render Completed Matches
         reversedHistory.forEach(match => {
             const matchCard = document.createElement('div');
             matchCard.className = 'card';
@@ -1706,7 +1746,6 @@
                 ? new Date(match.completionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                 : 'Date not available';
 
-            // --- FIX 2: Moved Delete button next to Scoreboard button ---
             matchCard.innerHTML = `
                 <div class="history-item-header">
                     <h4>${match.innings[1].team} vs ${match.innings[2].team}</h4>
@@ -1724,6 +1763,28 @@
         });
     }
 
+    // --- *** NEW FUNCTION *** ---
+    function resumeMatchFromHistory(matchDataString) {
+        if (!matchDataString) {
+            showToast("Error: Match data not found.");
+            return;
+        }
+        try {
+            const loadedMatch = JSON.parse(matchDataString);
+            matchState = loadedMatch;
+            history = [JSON.parse(JSON.stringify(matchState))]; // Reset undo stack
+            renderScorecard();
+            navigate('scorecard-screen');
+            showToast("Match resumed.");
+        } catch (e) {
+            console.error("Failed to parse in-progress match.", e);
+            localStorage.removeItem('inProgressMatch');
+            showToast("Could not resume match, data was corrupted.");
+            renderHistoryList(); // Refresh history list to remove the bad entry
+        }
+    }
+
+
     function viewHistoricMatch(matchId) {
         const historicMatch = appData.history.find(m => m.id === matchId);
         if (historicMatch) {
@@ -1734,14 +1795,25 @@
         }
     }
 
+    // --- *** MODIFIED FUNCTION *** ---
     function deleteHistoryItem(matchId) {
-        showConfirmationModal("Delete this match from history?", () => {
-            appData.history = appData.history.filter(m => m.id !== matchId);
-            saveData();
-            renderHistoryList();
-            showToast("Match deleted from history.");
-        });
+        if (matchId === 'inProgressMatch') {
+            showConfirmationModal("Are you sure you want to discard this in-progress match?", () => {
+                localStorage.removeItem('inProgressMatch');
+                renderHistoryList();
+                showToast("In-progress match discarded.");
+            });
+        } else {
+            showConfirmationModal("Delete this match from history?", () => {
+                appData.history = appData.history.filter(m => m.id !== matchId);
+                saveData();
+                renderHistoryList();
+                showToast("Match deleted from history.");
+            });
+        }
     }
+    // --- *** END MODIFICATIONS *** ---
+
 
     // --- TOURNAMENT ---
     // --- MODIFIED FUNCTION ---
