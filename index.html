@@ -1532,8 +1532,56 @@
         if (history.length > 1) {
             history.pop(); // Remove current state
             const prevState = history[history.length - 1]; // Get the previous state
-            matchState = JSON.parse(JSON.stringify(prevState));
-            // Also update the local storage backup
+            
+            // এই deep copy অবজেক্ট রেফারেন্সগুলো ভেঙে দেয়
+            matchState = JSON.parse(JSON.stringify(prevState)); 
+            
+            // --- START: COMPLETE UNDO FIX ---
+            // আমাদের অবশ্যই উভয় ইনিংসের রেফারেন্স পুনরায় লিঙ্ক করতে হবে,
+            // কারণ JSON.parse সবগুলো সংযোগ ভেঙে দিয়েছে।
+
+            const relink = (inning) => {
+                if (!inning || !inning.allBatsmen || !inning.allBowlers) return;
+
+                // এই ইনিংসের সকল ব্যাটসম্যানকে পুনরায় লিঙ্ক করুন
+                inning.allBatsmen.forEach((staleBatsman, index) => {
+                    // "সক্রিয়" লিস্ট (matchState.batsmen) থেকে মাস্টার অবজেক্টটি খুঁজুন
+                    const masterBatsman = matchState.batsmen.find(b => b.id === staleBatsman.id);
+                    if (masterBatsman) {
+                        inning.allBatsmen[index] = masterBatsman;
+                    }
+                });
+
+                // এই ইনিংসের সকল বোলারকে পুনরায় লিঙ্ক করুন
+                inning.allBowlers.forEach((staleBowler, index) => {
+                    // "সক্রিয়" লিস্ট (matchState.bowlers) থেকে মাস্টার অবজেক্টটি খুঁজুন
+                    const masterBowler = matchState.bowlers.find(b => b.id === staleBowler.id);
+                    if (masterBowler) {
+                        inning.allBowlers[index] = masterBowler;
+                    }
+                });
+            };
+
+            // উভয় ইনিংস পুনরায় লিঙ্ক করুন
+            relink(matchState.innings[1]);
+            relink(matchState.innings[2]);
+
+            // এখন, বর্তমান ইনিংসের জন্য "সক্রিয়" লিস্টগুলো 
+            // পুনরায় লিঙ্ক করা "স্থায়ী" লিস্ট থেকে তৈরি করুন।
+            const ci = matchState.innings[matchState.currentInnings];
+            if (ci) {
+                // "সক্রিয়" ব্যাটসম্যান লিস্ট পুনরায় তৈরি করুন
+                matchState.batsmen = matchState.batsmen.map(activeBatsman => {
+                    return ci.allBatsmen.find(b => b.id === activeBatsman.id) || activeBatsman;
+                });
+
+                // "সক্রিয়" বোলার লিস্ট পুনরায় তৈরি করুন
+                matchState.bowlers = matchState.bowlers.map(activeBowler => {
+                    return ci.allBowlers.find(b => b.id === activeBowler.id) || activeBowler;
+                });
+            }
+            // --- END: COMPLETE UNDO FIX ---
+
             localStorage.setItem('inProgressMatch', JSON.stringify(matchState));
             renderScorecard();
             showToast("Undo Successful");
@@ -1546,13 +1594,12 @@
 
     function handleRun(run) {
         if (matchState.isOverComplete) { showToast("Over is complete. Please start a new over."); return; }
-        saveState();
 
         const ci = matchState.innings[matchState.currentInnings];
         const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId);
         const striker = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired);
         const extraType = matchState.currentExtra;
-        let isLegalBall = true; // By default, a ball is legal
+        let isLegalBall = true; 
 
         if (extraType) {
             if (extraType === 'nb') {
@@ -1560,7 +1607,6 @@
                 isLegalBall = !extraSettings.reball;
                 if (striker) {
                     striker.runs += run;
-                    // No ball runs don't count towards batsman's balls faced
                 }
                 const totalRuns = run + extraSettings.runs;
                 ci.score += totalRuns;
@@ -1580,7 +1626,7 @@
                 matchState.thisOver.push(run + 'wd');
                 if (run % 2 !== 0) swapBatsmen();
             } else if (extraType === 'byes' || extraType === 'lb') {
-                isLegalBall = true; // Byes and Leg Byes are ALWAYS legal deliveries.
+                isLegalBall = true;
                 ci.score += run;
                 ci.extras[extraType] += run;
                 ci.extras.total += run;
@@ -1613,17 +1659,51 @@
         if (isGameOver()) {
             handleInningsEnd();
         } else if (isLegalBall && ci.balls > 0 && ci.balls % 6 === 0) {
+            
+            // --- START: NEW MAIDEN LOGIC ---
+            let isMaiden = true;
+            // এই ওভারে কোনো রান (1-6) বা এক্সট্রা (wd, nb) হয়েছে কিনা চেক করুন
+            for (const ball of matchState.thisOver) {
+                if (typeof ball === 'number' && ball > 0) { // 1, 2, 3, 4, 5, 6
+                    isMaiden = false;
+                    break;
+                }
+                const ballStr = String(ball);
+                if (ballStr.includes('wd') || ballStr.includes('nb')) { // 'wd', '1wd', 'nb', '4nb'
+                    isMaiden = false;
+                    break;
+                }
+                // 'W', 0, 'b', 'lb' হলে মেইডেন ঠিক থাকে
+            }
+            
+            if (isMaiden && cb) {
+                cb.maidens = (cb.maidens || 0) + 1;
+                showToast("Maiden Over!");
+            }
+            // --- END: NEW MAIDEN LOGIC ---
+
             matchState.isOverComplete = true;
             swapBatsmen();
         }
+
+        saveState(); 
         renderScorecard();
     }
 
+
     function swapBatsmen(manual = false) {
-        if(manual) saveState();
-        const onStrike = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); const nonStrike = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
-        if(onStrike) onStrike.onStrike = false; if(nonStrike) nonStrike.onStrike = true;
-        if(manual) renderScorecard();
+        // if(manual) saveState(); // <-- এই লাইনটি এখান থেকে রিমুভ করা হয়েছে
+
+        const onStrike = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); 
+        const nonStrike = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
+        
+        if(onStrike) onStrike.onStrike = false; 
+        if(nonStrike) nonStrike.onStrike = true;
+        
+        if(manual) {
+            saveState(); // <-- এই লাইনটি এখানে যোগ করা হয়েছে (কাজ শেষ করার পর)
+            renderScorecard();
+        }
     }
 
     function confirmNewBowler() {
@@ -1638,7 +1718,17 @@
             bowler = { id: generateUniqueId(), name: bowlerName, overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 };
             ci.allBowlers.push(bowler);
         }
-        matchState.bowlers = [bowler];
+        
+        // --- START FIX ---
+        // matchState.bowlers = [bowler]; // <-- এই ভুল লাইনটি ডিলিট করুন
+        
+        // এই কোডটি যোগ করুন:
+        // চেক করুন বোলারটি ইতিমধ্যে "সক্রিয়" বোলার লিস্টে আছে কিনা
+        if (!matchState.bowlers.find(b => b.id === bowler.id)) {
+            matchState.bowlers.push(bowler); // না থাকলে যোগ করুন
+        }
+        // --- END FIX ---
+
         matchState.currentBowlerId = bowler.id;
         matchState.thisOver = [];
         closeModal('choose-bowler-modal');
@@ -1723,13 +1813,16 @@
 
     // *** MODIFIED FUNCTION ***
     function confirmNewBatsman(type) {
-        saveState();
         const ci = matchState.innings[matchState.currentInnings]; 
         const outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); 
         let newName;
+        
+        // --- START: MAIDEN LOGIC ---
+        // 'cb' কে এখানে ডিফাইন করুন যাতে এটি 'else' ব্লকেও ব্যবহার করা যায়
+        const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId); 
+        // --- END: MAIDEN LOGIC ---
 
         if (type === 'wicket') {
-            const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId); 
             ci.wickets++; 
             if(cb) cb.wickets++; 
             ci.balls++; 
@@ -1737,27 +1830,40 @@
             if(outBatsman) { outBatsman.out = true; outBatsman.onStrike = false; }
             matchState.thisOver.push('W'); 
 
-            // *** Logic changed to check for select OR input ***
             const el = document.getElementById('new-batsman-select-wicket') || document.getElementById('new-batsman-input-wicket');
             newName = el.value.trim();
-            // *** End of change ***
-
+            
             closeModal('fall-of-wicket-modal');
-            if(ci.balls > 0 && ci.balls % 6 === 0) { matchState.isOverComplete = true; swapBatsmen(); }
+            
+            if(ci.balls > 0 && ci.balls % 6 === 0) { 
+                
+                // --- START: NEW MAIDEN LOGIC ---
+                let isMaiden = true;
+                for (const ball of matchState.thisOver) {
+                    if (typeof ball === 'number' && ball > 0) { isMaiden = false; break; }
+                    const ballStr = String(ball);
+                    if (ballStr.includes('wd') || ballStr.includes('nb')) { isMaiden = false; break; }
+                }
+                if (isMaiden && cb) {
+                    cb.maidens = (cb.maidens || 0) + 1;
+                    showToast("Maiden Over!");
+                }
+                // --- END: NEW MAIDEN LOGIC ---
+                
+                matchState.isOverComplete = true; 
+                swapBatsmen(); 
+            }
         } else { // type === 'retire'
             if(outBatsman) { outBatsman.retired = true; outBatsman.onStrike = false; }
             
-            // *** Logic changed to check for select OR input ***
             const el = document.getElementById('new-batsman-select-retire') || document.getElementById('new-batsman-input-retire');
             newName = el.value.trim();
-            // *** End of change ***
             
             closeModal('retire-modal'); 
         }
 
         if (!newName) { 
             showToast("Please enter new batsman's name."); 
-            renderScorecard(); 
             return; 
         }
         
@@ -1767,6 +1873,8 @@
         const nonStriker = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
         matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [newName, nonStriker ? nonStriker.name : ''] };
         
+        saveState(); 
+        
         if (isGameOver()) { 
             handleInningsEnd(); 
         }
@@ -1774,7 +1882,6 @@
             renderScorecard(); 
         }
     }
-
     function isGameOver() {
         const ci = matchState.innings[matchState.currentInnings]; const totalBalls = matchState.settings.totalOvers * 6;
         if (ci.wickets >= matchState.settings.playersPerTeam - 1 || ci.balls >= totalBalls) return true;
@@ -1874,7 +1981,15 @@
         navigateReplace('select-opening-players-screen');
     }
 
-    function addPenaltyRuns() { saveState(); const runs = parseInt(document.getElementById('penalty-run-input').value); if(runs > 0) matchState.innings[matchState.currentInnings].score += runs; closeModal('penalty-run-modal'); renderScorecard(); }
+    function addPenaltyRuns() { 
+        // saveState(); // <-- এই লাইনটি এখান থেকে রিমুভ করা হয়েছে
+        const runs = parseInt(document.getElementById('penalty-run-input').value); 
+        if(runs > 0) matchState.innings[matchState.currentInnings].score += runs; 
+        closeModal('penalty-run-modal'); 
+        
+        saveState(); // <-- এই লাইনটি এখানে যোগ করা হয়েছে
+        renderScorecard(); 
+    }
     function showPartnership() { showToast(`Partnership: ${matchState.currentPartnership.runs} (${matchState.currentPartnership.balls} balls)`); }
     function showExtras() { const extras = matchState.innings[matchState.currentInnings].extras; showToast(`Extras: ${extras.total} (Wd: ${extras.wd}, Nb: ${extras.nb}, B: ${extras.byes}, Lb: ${extras.lb})`); }
 
