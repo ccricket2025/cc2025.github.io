@@ -679,8 +679,25 @@
         <div id="innings-break-modal" class="modal-overlay"><div class="modal-content" style="text-align: center;"><h1 id="innings-break-header">1st Innings End</h1><p id="innings-break-target"></p><div class="btn-group"><button class="btn" onclick="showSecondInningsPlayersScreen()">Start 2nd Innings</button></div></div></div>
         <div id="create-team-modal" class="modal-overlay"><div class="modal-content"><h1>Create Team</h1><div class="form-group"><label>Team Name</label><input type="text" id="new-team-name-input"></div><div class="btn-group"><button class="btn btn-secondary" onclick="closeModal('create-team-modal')">Cancel</button><button class="btn" onclick="createTeam()">OK</button></div></div></div>
         <div id="add-player-modal" class="modal-overlay"><div class="modal-content"><h1>Add Player</h1><div class="form-group"><label>Player Name</label><input type="text" id="new-player-name-input"></div><button class="btn" onclick="addPlayer()">Save</button></div></div>
-        <div id="fall-of-wicket-modal" class="modal-overlay"><div class="modal-content"><h1>Fall of Wicket</h1><div class="form-group"><label>How wicket fall?</label><select id="wicket-type"><option>Bowled</option><option>Catch Out</option><option>Run out striker</option><option>Run out Non-striker</option><option>Stumping</option><option>LBW</option><option>Hit wicket</option></select></div><div class="form-group"><label>New Batsman</label><input type="text" id="new-batsman-input-wicket"></div><button class="btn" onclick="confirmNewBatsman('wicket')">Done</button></div></div>
-        <div id="retire-modal" class="modal-overlay"><div class="modal-content"><h1>New Batsman</h1><div class="form-group"><label>New Batsman Name</label><input type="text" id="new-batsman-input-retire"></div><button class="btn" onclick="confirmNewBatsman('retire')">Done</button></div></div>
+        
+        <div id="fall-of-wicket-modal" class="modal-overlay"><div class="modal-content"><h1>Fall of Wicket</h1><div class="form-group"><label>How wicket fall?</label><select id="wicket-type"><option>Bowled</option><option>Catch Out</option><option>Run out striker</option><option>Run out Non-striker</option><option>Stumping</option><option>LBW</option><option>Hit wicket</option></select></div>
+        <div class="form-group">
+            <label>New Batsman</label>
+            <div id="new-batsman-container-wicket">
+                 <input type="text" id="new-batsman-input-wicket" placeholder="Enter new batsman name">
+            </div>
+        </div>
+        <button class="btn" onclick="confirmNewBatsman('wicket')">Done</button></div></div>
+        
+        <div id="retire-modal" class="modal-overlay"><div class="modal-content"><h1>New Batsman</h1>
+        <div class="form-group">
+            <label>New Batsman Name</label>
+            <div id="new-batsman-container-retire">
+                <input type="text" id="new-batsman-input-retire" placeholder="Enter new batsman name">
+            </div>
+        </div>
+        <button class="btn" onclick="confirmNewBatsman('retire')">Done</button></div></div>
+
         <div id="choose-bowler-modal" class="modal-overlay">
             <div class="modal-content">
                 <h1>Choose New Bowler</h1>
@@ -1649,6 +1666,38 @@
         }
     }
 
+    // *** NEW FUNCTION ***
+    function renderNewBatsmanSelection() {
+        const battingTeam = matchState.battingTeamObject;
+        const containerWicket = document.getElementById('new-batsman-container-wicket');
+        const containerRetire = document.getElementById('new-batsman-container-retire');
+
+        // এই ইনিংসে যারা অলরেডি খেলেছে (ব্যাট করছে, আউট বা রিটায়ার্ড) তাদের তালিকা
+        const playersInMatch = matchState.innings[matchState.currentInnings].allBatsmen.map(b => b.name);
+
+        if (battingTeam && battingTeam.players.length > 0) {
+            let options = '<option value="">Select New Batsman</option>';
+            
+            battingTeam.players.forEach(player => {
+                // শুধু মাত্র সেই প্লেয়ারদের দেখানো হবে যারা এখনো ব্যাটিং-এ নামেনি
+                if (!playersInMatch.includes(player.name)) {
+                    options += `<option value="${player.name}">${player.name}</option>`;
+                }
+            });
+
+            // দুটি মডালের জন্যই ড্রপডাউন তৈরি করা
+            const selectHTMLWicket = `<select id="new-batsman-select-wicket">${options}</select>`;
+            const selectHTMLRetire = `<select id="new-batsman-select-retire">${options}</select>`;
+            
+            containerWicket.innerHTML = selectHTMLWicket;
+            containerRetire.innerHTML = selectHTMLRetire;
+        } else {
+            // যদি কোনো টিম সিলেক্ট করা না থাকে, তাহলে আগের মতোই ইনপুট বক্স থাকবে
+            containerWicket.innerHTML = `<input type="text" id="new-batsman-input-wicket" placeholder="Enter new batsman name">`;
+            containerRetire.innerHTML = `<input type="text" id="new-batsman-input-retire" placeholder="Enter new batsman name">`;
+        }
+    }
+
     function forceNewOver() {
         if (!matchState.isOverComplete) {
             showToast("Over is not yet complete.");
@@ -1658,25 +1707,72 @@
         showModal('choose-bowler-modal');
     }
 
-    function handleWicket() { if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } showModal('fall-of-wicket-modal'); }
-    function handleRetire() { if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } showModal('retire-modal'); }
+    // *** MODIFIED FUNCTION ***
+    function handleWicket() { 
+        if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } 
+        renderNewBatsmanSelection(); // <-- This line is added
+        showModal('fall-of-wicket-modal'); 
+    }
+    
+    // *** MODIFIED FUNCTION ***
+    function handleRetire() { 
+        if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } 
+        renderNewBatsmanSelection(); // <-- This line is added
+        showModal('retire-modal'); 
+    }
 
+    // *** MODIFIED FUNCTION ***
     function confirmNewBatsman(type) {
         saveState();
-        const ci = matchState.innings[matchState.currentInnings]; const outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); let newName;
+        const ci = matchState.innings[matchState.currentInnings]; 
+        const outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); 
+        let newName;
+
         if (type === 'wicket') {
-            const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId); ci.wickets++; if(cb) cb.wickets++; ci.balls++; if(cb) cb.balls++;
+            const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId); 
+            ci.wickets++; 
+            if(cb) cb.wickets++; 
+            ci.balls++; 
+            if(cb) cb.balls++;
             if(outBatsman) { outBatsman.out = true; outBatsman.onStrike = false; }
-            matchState.thisOver.push('W'); newName = document.getElementById('new-batsman-input-wicket').value; closeModal('fall-of-wicket-modal');
+            matchState.thisOver.push('W'); 
+
+            // *** Logic changed to check for select OR input ***
+            const el = document.getElementById('new-batsman-select-wicket') || document.getElementById('new-batsman-input-wicket');
+            newName = el.value.trim();
+            // *** End of change ***
+
+            closeModal('fall-of-wicket-modal');
             if(ci.balls > 0 && ci.balls % 6 === 0) { matchState.isOverComplete = true; swapBatsmen(); }
-        } else { if(outBatsman) { outBatsman.retired = true; outBatsman.onStrike = false; } newName = document.getElementById('new-batsman-input-retire').value; closeModal('retire-modal'); }
-        if (!newName) { showToast("Please enter new batsman's name."); renderScorecard(); return; }
+        } else { // type === 'retire'
+            if(outBatsman) { outBatsman.retired = true; outBatsman.onStrike = false; }
+            
+            // *** Logic changed to check for select OR input ***
+            const el = document.getElementById('new-batsman-select-retire') || document.getElementById('new-batsman-input-retire');
+            newName = el.value.trim();
+            // *** End of change ***
+            
+            closeModal('retire-modal'); 
+        }
+
+        if (!newName) { 
+            showToast("Please enter new batsman's name."); 
+            renderScorecard(); 
+            return; 
+        }
+        
         const newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
-        matchState.batsmen.push(newBatsman); ci.allBatsmen.push(newBatsman);
+        matchState.batsmen.push(newBatsman); 
+        ci.allBatsmen.push(newBatsman);
         const nonStriker = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
         matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [newName, nonStriker ? nonStriker.name : ''] };
-        if (isGameOver()) { handleInningsEnd(); }
-        else { renderScorecard(); }
+        
+        if (isGameOver()) { 
+            handleInningsEnd(); 
+        }
+        else { 
+            renderScorecard(); 
+        }
     }
 
     function isGameOver() {
