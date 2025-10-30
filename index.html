@@ -1989,7 +1989,8 @@
     // --- UI RENDERING ---
     function renderScorecard() {
         const ci = matchState.innings[matchState.currentInnings]; const overs = Math.floor(ci.balls / 6), ballsThisOver = ci.balls % 6;
-        document.getElementById('scoreboard-main').innerText = `${ci.score}/${ci.wickets} (${overs}.${ballsThisOver})`;
+        const totalOvers = matchState.settings.totalOvers; //
+        document.getElementById('scoreboard-main').innerText = `${ci.score}/${ci.wickets} (${overs}.${ballsThisOver} / ${totalOvers}.0)`;
         document.getElementById('scorecard-header-teams').innerText = `${matchState.battingTeam} vs ${matchState.bowlingTeam}`;
         const crr = ci.balls > 0 ? (ci.score / (ci.balls / 6 || 1)).toFixed(2) : '0.00'; let detailsText = `CRR: ${crr}`;
         if(matchState.currentInnings === 2) {
