@@ -1923,9 +1923,13 @@
     function confirmNewBowler() {
         const bowlerEl = document.getElementById('new-bowler-select') || document.getElementById('new-bowler-input');
         const bowlerName = bowlerEl.value.trim();
-
-        if(!bowlerName) { showToast("Please select/enter a bowler name."); return; }
-
+ 
+        // --- *** নতুন যাচাইকরণ: বোলার সিলেক্ট না করলে মডাল বন্ধ হবে না *** ---
+        if(!bowlerName) { 
+            showToast("Please select or enter a bowler name."); 
+            return; // ফাংশন এখানেই শেষ হবে, মডাল বন্ধ হবে না
+        }
+ 
         const ci = matchState.innings[matchState.currentInnings];
         let bowler = ci.allBowlers.find(b => b.name === bowlerName);
         if(!bowler) {
@@ -2058,6 +2062,26 @@ function toggleRunOutRuns(wicketType) {
     function confirmNewBatsman(type) {
     saveState(); // যেকোনো কিছু করার আগে বর্তমান অবস্থার ব্যাকআপ নিন
 
+    // --- START: NEW VALIDATION FOR WICKET & RETIRE ---
+    if (type === 'wicket' || type === 'retire') {
+        const elId = (type === 'wicket') ? 'new-batsman-select-wicket' : 'new-batsman-select-retire';
+        const inputId = (type === 'wicket') ? 'new-batsman-input-wicket' : 'new-batsman-input-retire';
+        const el = document.getElementById(elId) || document.getElementById(inputId);
+        const newName = el.value.trim();
+
+        // যদি খেলা শেষ না হয়ে থাকে কিন্তু কোনো নাম সিলেক্ট করা না হয়
+        if (!isGameOver() && !newName) {
+            // যদি ড্রপডাউনে আরও অপশন থাকে, তাহলে ইউজারকে সিলেক্ট করতে বলুন
+            if (el.tagName === 'SELECT' && el.options.length > 1) {
+                 showToast("Please select a new batsman.");
+                 history.pop(); // যেহেতু কোনো কাজ হয়নি, তাই সেভ করা স্টেট বাতিল করুন
+                 return; // ফাংশন এখানেই শেষ, মডাল খোলা থাকবে
+            }
+        }
+    }
+    // --- END: NEW VALIDATION ---
+
+
     const ci = matchState.innings[matchState.currentInnings];
     const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId);
 
@@ -2177,7 +2201,7 @@ function toggleRunOutRuns(wicketType) {
         // রান-আউট না হলে বোলারের উইকেট বাড়ে
         if (!isRunOut && cb) {
             cb.wickets++;
-            dismissalText = `b ${cb.name}`;
+            dismissalText = `${wicketType} b ${cb.name}`; // যেমন: "Bowled b BowlerName"
         }
 
         if (isLegalBall) {
@@ -2271,13 +2295,14 @@ function toggleRunOutRuns(wicketType) {
         
         if (!newName) {
             showToast("All out! No new batsman.");
+            closeModal('fall-of-wicket-modal'); // মডাল বন্ধ করুন
             renderScorecard();
             return;
         }
 
         const newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
         
-        // অন্য প্রান্তে কে আছে তাকে নন-স্ট্রাইক দিন
+        // অন্য প্রান্তে কে আছে তাকে নন-স্ট্রাইকে পাঠান
         const nonStriker = matchState.batsmen.find(b => !b.out && !b.retired);
         if (nonStriker) {
             nonStriker.onStrike = false;
@@ -2551,10 +2576,22 @@ function getTeamAbbreviation(teamName) {
             battingHTML += `<h4>Batting</h4><div class="table-responsive"><table class="score-table"><thead><tr><th>Batsman</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>`;
             inning.allBatsmen.forEach(b => {
                  const sr = b.balls > 0 ? (b.runs / b.balls * 100).toFixed(2) : '0.00';
-                 // --- *** পরিবর্তিত কোড: ব্যাটসম্যানের স্ট্যাটাস নামের পাশে দেখানো হচ্ছে *** ---
-                 const dismissalHTML = b.dismissal ? `<span class="dismissal-info">${b.dismissal}</span>` : (b.retired ? `<span class="dismissal-info">retired hurt</span>` : `<span class="dismissal-info">not out</span>`);
+                 
+                 // --- START: IMPROVED DISMISSAL LOGIC FOR PDF ---
+                 let dismissalHTML = `<span class="dismissal-info">not out</span>`; // Default
+                 if (b.out) {
+                     if (b.dismissal && b.dismissal.toLowerCase().includes('run out')) {
+                         dismissalHTML = `<span class="dismissal-info">run out</span>`;
+                     } else if (b.dismissal) {
+                         dismissalHTML = `<span class="dismissal-info">${b.dismissal}</span>`;
+                     }
+                 } else if (b.retired) {
+                     dismissalHTML = `<span class="dismissal-info">retired hurt</span>`;
+                 }
+                 // --- END: IMPROVED DISMISSAL LOGIC FOR PDF ---
+
                  battingHTML += `<tr>
-                    <td class="batsman-name-cell">${b.name} ${dismissalHTML}</td>
+                    <td class="batsman-name-cell">${b.name} ${dismissalHTML}</td> 
                     <td>${b.runs}</td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td>${sr}</td>
                 </tr>`;
             });
