@@ -634,7 +634,10 @@
     </div>
     <div id="app-container" style="display: none;">
         <div id="new-match-screen" class="screen active">
-            <header class="app-header"></header>
+            <header class="app-header">
+                <h1 style="flex-grow: 1; text-align: left; padding-left: 16px;">New Match</h1>
+                <button class="icon-button" onclick="handleRefresh()"><span class="material-icons" aria-hidden="true">refresh</span></button>
+            </header>
             <main class="content">
                 <div class="card">
                     <h2>Teams</h2>
@@ -875,7 +878,7 @@
     const firebaseConfig = {
       apiKey: "AIzaSyCV2XwcArssrHcgeGSruUGmU524ceSLwRk",
       authDomain: "cricketcc.firebaseapp.com",
-      projectId: "cricketcc",
+      projectId: "cricket",
       storageBucket: "cricketcc.firebasestorage.app",
       messagingSenderId: "1067596696661",
       appId: "1:1067596696661:web:e0b7943b002f075b7858dc"
@@ -1282,6 +1285,14 @@
         await publishPublicData();
 
         showToast('Data saved and synced!');
+    }
+
+    // --- *** NEW FUNCTION FOR REFRESH BUTTON *** ---
+    async function handleRefresh() {
+        showToast("Refreshing data...");
+        await loadData(); // Reloads all data from Firebase
+        renderInitialUI(); // Re-renders the current view
+        showToast("Data refreshed successfully!");
     }
 
 
@@ -2614,6 +2625,7 @@ function getTeamAbbreviation(teamName) {
             history = [JSON.parse(JSON.stringify(matchState))]; // Reset undo stack
             renderScorecard();
             navigate('scorecard-screen');
+            localStorage.removeItem('inProgressMatch'); // Remove from local storage after resuming
             showToast("Match resumed.");
         } catch (e) {
             console.error("Failed to parse in-progress match.", e);
