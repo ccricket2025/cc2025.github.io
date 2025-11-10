@@ -793,7 +793,8 @@
                      <button class="btn btn-secondary" onclick="showExtras()">Extras</button>
                 </div>
                 <div class="btn-group" style="justify-content: flex-start;">
-                     <button id="new-over-btn" class="btn" onclick="forceNewOver()" style="flex-grow: 0; width: auto; min-width: 120px;">New Over</button>
+                    <button id="new-over-btn" class="btn" onclick="forceNewOver()" style="flex-grow: 0; width: auto; min-width: 120px;">New Over</button>
+                    <button id="start-second-innings-btn" class="btn" onclick="showSecondInningsPlayersScreen()" style="flex-grow: 0; width: auto; min-width: 150px; display: none; background: var(--accent-color);">Start 2nd Innings</button>
                 </div>
             </main>
             <button id="new-match-from-scorecard-btn" class="btn" onclick="resetToNewMatch()">New Match</button>
@@ -926,7 +927,7 @@
     const firebaseConfig = {
       apiKey: "AIzaSyCV2XwcArssrHcgeGSruUGmU524ceSLwRk",
       authDomain: "cricketcc.firebaseapp.com",
-      projectId: "cricketcc",
+      projectId: "cricket",
       storageBucket: "cricketcc.firebasestorage.app",
       messagingSenderId: "1067596696661",
       appId: "1:1067596696661:web:e0b7943b002f075b7858dc"
@@ -1433,6 +1434,7 @@
             showConfirmationModal("An unfinished match was found. Would you like to resume it?",
                 () => { // onConfirm
                     try {
+                        localStorage.removeItem('inProgressMatch'); // Resume করার পর ইন-প্রগ্রেস ম্যাচ মুছে ফেলুন
                         const loadedMatch = JSON.parse(inProgressMatchData);
                         matchState = loadedMatch;
                         history = [JSON.parse(JSON.stringify(matchState))];
@@ -1746,7 +1748,8 @@
     function undoLastAction() {
         if (history.length > 1) {
             history.pop(); // Remove current state
-            
+            const prevState = history[history.length - 1]; // Get the previous state
+
             // এই deep copy অবজেক্ট রেফারেন্সগুলো ভেঙে দেয়
             matchState = JSON.parse(JSON.stringify(prevState)); 
             
@@ -1754,48 +1757,8 @@
             // আমাদের অবশ্যই উভয় ইনিংসের রেফারেন্স পুনরায় লিঙ্ক করতে হবে,
             // কারণ JSON.parse সবগুলো সংযোগ ভেঙে দিয়েছে।
 
-            const relink = (inning) => {
-                if (!inning || !inning.allBatsmen || !inning.allBowlers) return;
-
-                // এই ইনিংসের সকল ব্যাটসম্যানকে পুনরায় লিঙ্ক করুন
-                inning.allBatsmen.forEach((staleBatsman, index) => {
-                    // "সক্রিয়" লিস্ট (matchState.batsmen) থেকে মাস্টার অবজেক্টটি খুঁজুন
-                    const masterBatsman = matchState.batsmen.find(b => b.id === staleBatsman.id);
-                    if (masterBatsman) {
-                        inning.allBatsmen[index] = masterBatsman;
-                    }
-                });
-
-                // এই ইনিংসের সকল বোলারকে পুনরায় লিঙ্ক করুন
-                inning.allBowlers.forEach((staleBowler, index) => {
-                    // "সক্রিয়" লিস্ট (matchState.bowlers) থেকে মাস্টার অবজেক্টটি খুঁজুন
-                    const masterBowler = matchState.bowlers.find(b => b.id === staleBowler.id);
-                    if (masterBowler) {
-                        inning.allBowlers[index] = masterBowler;
-                    }
-                });
-            };
-
-            // উভয় ইনিংস পুনরায় লিঙ্ক করুন
-            relink(matchState.innings[1]);
-            relink(matchState.innings[2]);
-
-            // এখন, বর্তমান ইনিংসের জন্য "সক্রিয়" লিস্টগুলো 
-            // পুনরায় লিঙ্ক করা "স্থায়ী" লিস্ট থেকে তৈরি করুন।
-            const ci = matchState.innings[matchState.currentInnings];
-            if (ci) {
-                // "সক্রিয়" ব্যাটসম্যান লিস্ট পুনরায় তৈরি করুন
-                matchState.batsmen = matchState.batsmen.map(activeBatsman => {
-                    return ci.allBatsmen.find(b => b.id === activeBatsman.id) || activeBatsman;
-                });
-
-                // "সক্রিয়" বোলার লিস্ট পুনরায় তৈরি করুন
-                matchState.bowlers = matchState.bowlers.map(activeBowler => {
-                    return ci.allBowlers.find(b => b.id === activeBowler.id) || activeBowler;
-                });
-            }
-            // --- END: COMPLETE UNDO FIX ---
-
+            // Since matchState is a deep copy of prevState, all internal references are already correct.
+            // The complex relinking logic is not needed.
             localStorage.setItem('inProgressMatch', JSON.stringify(matchState));
             renderScorecard();
             showToast("Undo Successful");
@@ -1992,22 +1955,41 @@
         const containerWicket = document.getElementById('new-batsman-container-wicket');
         const containerRetire = document.getElementById('new-batsman-container-retire');
 
-        // এই ইনিংসে যারা অলরেডি খেলেছে (ব্যাট করছে, আউট বা রিটায়ার্ড) তাদের তালিকা
+        // এই ইনিংসে যারা অলরেডি খেলেছে (ব্যাট করছে, আউট) তাদের নামের তালিকা
         const playersInMatch = matchState.innings[matchState.currentInnings].allBatsmen.map(b => b.name);
+        // যারা রিটায়ার করেছে কিন্তু আউট হয়নি, তাদের তালিকা
+        const retiredBatsmen = matchState.innings[matchState.currentInnings].allBatsmen.filter(b => b.retired && !b.out);
 
         if (battingTeam && battingTeam.players.length > 0) {
-            let options = '<option value="">Select New Batsman</option>';
+            let optionsHTML = '<option value="">Select Batsman</option>';
             
-            battingTeam.players.forEach(player => {
-                // শুধু মাত্র সেই প্লেয়ারদের দেখানো হবে যারা এখনো ব্যাটিং-এ নামেনি
-                if (!playersInMatch.includes(player.name)) {
-                    options += `<option value="${player.name}">${player.name}</option>`;
-                }
-            });
+            // --- নতুন ব্যাটসম্যানদের জন্য অপশন গ্রুপ ---
+            const newPlayers = battingTeam.players.filter(player => !playersInMatch.includes(player.name));
+            if (newPlayers.length > 0) {
+                optionsHTML += '<optgroup label="New Batsmen">';
+                newPlayers.forEach(player => {
+                    optionsHTML += `<option value="${player.name}">${player.name}</option>`;
+                });
+                optionsHTML += '</optgroup>';
+            }
+
+            // --- রিটায়ার হওয়া ব্যাটসম্যানদের জন্য অপশন গ্রুপ ---
+            if (retiredBatsmen.length > 0) {
+                optionsHTML += '<optgroup label="Returning Batsmen">';
+                retiredBatsmen.forEach(player => {
+                    optionsHTML += `<option value="${player.name}">${player.name}</option>`;
+                });
+                optionsHTML += '</optgroup>';
+            }
 
             // দুটি মডালের জন্যই ড্রপডাউন তৈরি করা
-            const selectHTMLWicket = `<select id="new-batsman-select-wicket">${options}</select>`;
-            const selectHTMLRetire = `<select id="new-batsman-select-retire">${options}</select>`;
+            const selectHTMLWicket = `<select id="new-batsman-select-wicket">${optionsHTML}</select>`;
+            // রিটায়ার মডালের জন্য শুধুমাত্র নতুন ব্যাটসম্যানদের দেখানো হচ্ছে
+            let retireOptionsHTML = '<option value="">Select New Batsman</option>';
+            newPlayers.forEach(player => {
+                retireOptionsHTML += `<option value="${player.name}">${player.name}</option>`;
+            });
+            const selectHTMLRetire = `<select id="new-batsman-select-retire">${retireOptionsHTML}</select>`;
             
             containerWicket.innerHTML = selectHTMLWicket;
             containerRetire.innerHTML = selectHTMLRetire;
@@ -2070,7 +2052,7 @@ function toggleRunOutRuns(wicketType) {
         const newName = el.value.trim();
 
         // যদি খেলা শেষ না হয়ে থাকে কিন্তু কোনো নাম সিলেক্ট করা না হয়
-        if (!isGameOver() && !newName) {
+        if (!isGameOver() && !newName && type === 'wicket') {
             // যদি ড্রপডাউনে আরও অপশন থাকে, তাহলে ইউজারকে সিলেক্ট করতে বলুন
             if (el.tagName === 'SELECT' && el.options.length > 1) {
                  showToast("Please select a new batsman.");
@@ -2085,27 +2067,42 @@ function toggleRunOutRuns(wicketType) {
     const ci = matchState.innings[matchState.currentInnings];
     const cb = matchState.bowlers.find(b => b.id === matchState.currentBowlerId);
 
-    // --- 'RETIRE' LOGIC (এটি অপরিবর্তিত) ---
+    // --- 'RETIRE' LOGIC (কার্যকর করা হলো) ---
     if (type === 'retire') {
+        // ধাপ ১: কোন ব্যাটসম্যান রিটায়ার করছেন তা খুঁজুন
         const outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired);
         if (outBatsman) {
             outBatsman.retired = true;
             outBatsman.onStrike = false;
         }
-        const newName = document.getElementById('new-batsman-input-retire').value.trim();
-        closeModal('retire-modal');
-        if (!newName) { showToast("Please enter new batsman's name."); renderScorecard(); return; }
 
-        const newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
-        matchState.batsmen.push(newBatsman);
-        ci.allBatsmen.push(newBatsman);
-        const nonStriker = matchState.batsmen.find(b => !b.out && !b.retired);
-        matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [newName, nonStriker ? nonStriker.name : ''] };
-        
-        saveState(); // সমস্ত পরিবর্তন সম্পন্ন হওয়ার পর সেভ করুন
+        // ধাপ ২: নতুন ব্যাটসম্যানের নাম মডাল থেকে নিন
+        const el = document.getElementById('new-batsman-select-retire') || document.getElementById('new-batsman-input-retire');
+        const newName = el.value.trim();
+        closeModal('retire-modal');
+
+        // ধাপ ৩: খেলা শেষ কিনা বা নতুন ব্যাটসম্যান আছে কিনা তা পরীক্ষা করুন
         if (isGameOver()) {
             handleInningsEnd();
+            return; // ফাংশন এখানে শেষ
+        }
+
+        // যদি নতুন ব্যাটসম্যানের নাম থাকে, তবে তাকে ক্রিজে আনুন
+        if (newName) {
+            const newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
+            matchState.batsmen.push(newBatsman);
+            ci.allBatsmen.push(newBatsman);
+
+            // অন্য প্রান্তে থাকা ব্যাটসম্যানকে খুঁজুন
+            const otherActiveBatsman = matchState.batsmen.find(b => b.id !== newBatsman.id && !b.out && !b.retired);
+            
+            // নতুন পার্টনারশিপ শুরু করুন
+            matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [newName, otherActiveBatsman ? otherActiveBatsman.name : ''] };
+            
+            renderScorecard();
         } else {
+            // নতুন ব্যাটসম্যান নেই, সম্ভবত সব আউট
+            showToast("No new batsman available.");
             renderScorecard();
         }
         return; // ফাংশন এখানে শেষ
@@ -2124,11 +2121,12 @@ function toggleRunOutRuns(wicketType) {
         let isLegalBall = true;
         let ballEvent = 'W';
 
-        // ১. কোন ব্যাটসম্যান আউট হয়েছে তা নির্ধারণ করুন
+        // ১. কোন ব্যাটসম্যান আউট হয়েছে তা নির্ধারণ করুন (যদি কেউ ক্রিজে থাকে)
         let outBatsman;
         if (wicketType === 'Run out striker') {
-            outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired);
+            outBatsman = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired); // স্ট্রাইকারকে খুঁজুন
         } else if (wicketType === 'Run out Non-striker') {
+            // নন-স্ট্রাইকারকে খুঁজুন
             outBatsman = matchState.batsmen.find(b => !b.onStrike && !b.out && !b.retired);
         } else {
             // Bowled, Catch, LBW, Stumping ইত্যাদির জন্য সর্বদা স্ট্রাইকার আউট হয়
@@ -2288,7 +2286,7 @@ function toggleRunOutRuns(wicketType) {
         }
 
         // ৯. নতুন ব্যাটসম্যানকে ক্রিজে আনুন (যদি খেলা শেষ না হয়)
-        if (isGameOver()) {
+        if (isGameOver()) { // এখানে isGameOver() ঠিক আছে কারণ নতুন ব্যাটসম্যান যোগ করার আগেই চেক করা হচ্ছে
             handleInningsEnd();
             return; // নতুন ব্যাটসম্যান যোগ করার দরকার নেই
         }
@@ -2300,32 +2298,59 @@ function toggleRunOutRuns(wicketType) {
             return;
         }
 
-        const newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
-        
+        // --- START: Returning Batsman Logic ---
+        let newBatsman = ci.allBatsmen.find(b => b.name === newName && b.retired);
+
+        if (newBatsman) {
+            // ইনি একজন রিটায়ার্ড ব্যাটসম্যান যিনি ফিরে এসেছেন
+            newBatsman.retired = false; // তাকে আবার সক্রিয় করা হলো
+            newBatsman.onStrike = true;
+
+            // --- *** START: BUG FIX *** ---
+            // সক্রিয় ব্যাটসম্যানদের তালিকা থেকে তার পুরোনো (retired) রেফারেন্সটি সরিয়ে ফেলুন
+            matchState.batsmen = matchState.batsmen.filter(b => b.id !== newBatsman.id);
+            // --- *** END: BUG FIX *** ---
+
+            showToast(`${newName} has returned to bat.`);
+        } else {
+            // ইনি একজন সম্পূর্ণ নতুন ব্যাটসম্যান
+            newBatsman = { id: generateUniqueId(), name: newName, runs: 0, balls: 0, fours: 0, sixes: 0, onStrike: true, out: false, retired: false };
+            ci.allBatsmen.push(newBatsman);
+        }
+        // --- END: Returning Batsman Logic ---
+
         // অন্য প্রান্তে কে আছে তাকে নন-স্ট্রাইকে পাঠান
         const nonStriker = matchState.batsmen.find(b => !b.out && !b.retired);
         if (nonStriker) {
             nonStriker.onStrike = false;
         }
         
+        // নতুন বা ফিরে আসা ব্যাটসম্যানকে সক্রিয় লিস্টে যোগ করুন
         matchState.batsmen.push(newBatsman);
-        ci.allBatsmen.push(newBatsman);
         matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [newName, nonStriker ? nonStriker.name : ''] };
 
         // ১০. সবশেষে স্কোরকার্ড রেন্ডার করুন
         renderScorecard();
-        saveState(); // সমস্ত পরিবর্তন সম্পন্ন হওয়ার পর সেভ করুন
     }
 }
     function isGameOver() {
-        const ci = matchState.innings[matchState.currentInnings]; const totalBalls = matchState.settings.totalOvers * 6;
-        if (ci.wickets >= matchState.settings.playersPerTeam - 1 || ci.balls >= totalBalls) return true;
+        const ci = matchState.innings[matchState.currentInnings];
+        const totalBalls = matchState.settings.totalOvers * 6;
+
+        // Condition 1: All out (considering returning batsmen)
+        const availableBatsmenCount = (matchState.settings.playersPerTeam - 1) - ci.wickets;
+        // If all batsmen are out AND there are no retired batsmen waiting to return
+        if (availableBatsmenCount <= 0 && !ci.allBatsmen.some(b => b.retired && !b.out)) {
+            return true;
+        }
+
+        if (ci.balls >= totalBalls) return true; // Overs completed
         if (matchState.currentInnings === 2 && matchState.target && ci.score >= matchState.target) return true;
         return false;
     }
 
-    function handleInningsEnd() {
-        localStorage.removeItem('inProgressMatch'); // Match finished, remove backup
+
+    function handleInningsEnd(isLive = true) {
         const ci = matchState.innings[matchState.currentInnings];
         if (matchState.thisOver.length > 0) {
             const bowler = ci.allBowlers.find(b => b.id === matchState.currentBowlerId);
@@ -2336,10 +2361,16 @@ function toggleRunOutRuns(wicketType) {
             matchState.thisOver = [];
         }
         if(matchState.currentInnings === 1) {
-            matchState.target = matchState.innings[1].score + 1;
-            document.getElementById('innings-break-target').innerText = `${matchState.bowlingTeam} needs ${matchState.target} runs to win.`;
-            showModal('innings-break-modal');
+            // --- START: MODIFIED INNINGS BREAK LOGIC ---
+            matchState.target = ci.score + 1;
+            matchState.isFirstInningsComplete = true; // নতুন ফ্ল্যাগ সেট করা হলো
+            if (isLive) {
+                renderScorecard(); // UI আপডেট করার জন্য স্কোরকার্ড রেন্ডার করুন
+                showToast("1st Innings Complete. Click 'Start 2nd Innings' to continue.");
+            }
+            // --- END: MODIFIED INNINGS BREAK LOGIC ---
         } else {
+             localStorage.removeItem('inProgressMatch'); // Match finished, remove backup
              const i1 = matchState.innings[1]; const i2 = matchState.innings[2];
              if (i2.score >= matchState.target) { const wicketsLeft = matchState.settings.playersPerTeam - 1 - i2.wickets; matchState.result = `${i2.team} won by ${wicketsLeft} wickets.`; }
              else if (i2.score === i1.score) { matchState.result = "Match Draw."; }
@@ -2435,7 +2466,8 @@ function toggleRunOutRuns(wicketType) {
     }
 
     function showSecondInningsPlayersScreen() {
-        closeModal('innings-break-modal');
+        saveState(); // দ্বিতীয় ইনিংস শুরু করার আগে স্টেট সেভ করুন
+
         matchState.currentInnings = 2;
         [matchState.battingTeam, matchState.bowlingTeam] = [matchState.bowlingTeam, matchState.battingTeam];
         [matchState.battingTeamObject, matchState.bowlingTeamObject] = [matchState.bowlingTeamObject, matchState.battingTeamObject];
@@ -2449,6 +2481,7 @@ function toggleRunOutRuns(wicketType) {
         matchState.isOverComplete = false;
         matchState.pendingRun = null;
         matchState.currentPartnership = { runs: 0, balls: 0, batsmen: [] };
+        matchState.isFirstInningsComplete = false; // ফ্ল্যাগ রিসেট করুন
         matchState.currentExtra = null;
 
         document.getElementById('select-players-header').innerText = `Select Players - ${matchState.battingTeam}`;
@@ -2547,7 +2580,15 @@ function getTeamAbbreviation(teamName) {
             thisOverContainer.appendChild(ballElement);
         });
 
-        document.getElementById('new-over-btn').classList.toggle('alert', matchState.isOverComplete);
+        // --- START: MODIFIED BUTTON VISIBILITY LOGIC ---
+        const newOverBtn = document.getElementById('new-over-btn');
+        const startSecondInningsBtn = document.getElementById('start-second-innings-btn');
+
+        newOverBtn.style.display = matchState.isFirstInningsComplete ? 'none' : 'flex';
+        startSecondInningsBtn.style.display = matchState.isFirstInningsComplete ? 'flex' : 'none';
+
+        newOverBtn.classList.toggle('alert', matchState.isOverComplete && !matchState.isFirstInningsComplete);
+        // --- END: MODIFIED BUTTON VISIBILITY LOGIC ---
 
         // ** MODIFIED: Publish score updates to viewers **
         publishPublicData();
@@ -2668,7 +2709,7 @@ function getTeamAbbreviation(teamName) {
                 const matchCard = document.createElement('div');
                 matchCard.className = 'card';
                 matchCard.style.borderLeft = '4px solid var(--warning-color)'; // Highlight
-                matchCard.dataset.matchData = inProgressMatchData; // Store data on the element
+                matchCard.dataset.matchData = inProgressMatchData; // ডেটা এলিমেন্টে সংরক্ষণ করুন
 
                 const ci = match.innings[match.currentInnings];
                 const ci_num_text = match.currentInnings === 1 ? '1st' : '2nd';
@@ -2684,7 +2725,7 @@ function getTeamAbbreviation(teamName) {
                             ${match.battingTeam} are ${ci.score}/${ci.wickets} (${overs}) - ${ci_num_text} Innings
                         </p>
                         <div class="btn-group" style="margin-top: 8px;">
-                            <button class="btn" style="background: var(--warning-color);" onclick="resumeMatchFromHistory(this.closest('.card').dataset.matchData)">Resume</button>
+                            <button class="btn" style="background: var(--warning-color);" onclick="resumeMatchFromHistory(this.closest('.card').dataset.matchData)">Resume</button> <!-- নতুন ফাংশন কল করা হয়েছে -->
                             <button class="btn" style="background: var(--danger-color);" onclick="event.stopPropagation(); deleteHistoryItem('inProgressMatch');">Discard</button>
                         </div>
                     </div>
