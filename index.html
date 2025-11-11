@@ -1768,6 +1768,11 @@
     }
 
     function handleExtra(type) { document.querySelectorAll('.scoring-controls .btn').forEach(b => b.classList.remove('active')); document.getElementById(type + '-btn').classList.add('active'); matchState.currentExtra = type; }
+    // --- *** নতুন কোড: প্রথম ইনিংস শেষ হলে স্কোরিং ব্লক করা *** ---
+    function isScoringBlocked() {
+        if (matchState.isFirstInningsComplete) { showToast("1st innings is over. Start the 2nd innings."); return true; }
+        return false;
+    }
 
     function handleRun(run) {
         if (matchState.isOverComplete) { showToast("Over is complete. Please start a new over."); return; }
@@ -1777,6 +1782,9 @@
         const striker = matchState.batsmen.find(b => b.onStrike && !b.out && !b.retired);
         const extraType = matchState.currentExtra;
         let isLegalBall = true; 
+
+        // --- *** নতুন কোড: স্কোরিং ব্লক চেক *** ---
+        if (isScoringBlocked()) return;
 
         if (extraType) {
             if (extraType === 'nb') {
@@ -2022,6 +2030,9 @@ function toggleRunOutRuns(wicketType) {
 
     // *** MODIFIED FUNCTION ***
     function handleWicket() {
+    // --- *** নতুন কোড: স্কোরিং ব্লক চেক *** ---
+    if (isScoringBlocked()) return;
+
     if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; }
     
     renderNewBatsmanSelection(); // আপনার নতুন ব্যাটসম্যানদের লোড করে
@@ -2035,6 +2046,9 @@ function toggleRunOutRuns(wicketType) {
     
     // *** MODIFIED FUNCTION ***
     function handleRetire() { 
+        // --- *** নতুন কোড: স্কোরিং ব্লক চেক *** ---
+        if (isScoringBlocked()) return;
+
         if(matchState.isOverComplete){ showToast("Over complete. Start new over."); return; } 
         renderNewBatsmanSelection(); // <-- This line is added
         showModal('retire-modal'); 
@@ -2490,6 +2504,9 @@ function toggleRunOutRuns(wicketType) {
     }
 
     function addPenaltyRuns() { 
+        // --- *** নতুন কোড: স্কোরিং ব্লক চেক *** ---
+        if (isScoringBlocked()) return;
+
         // saveState(); // <-- এটি এখন ফাংশনের শেষে কল করা হবে
         const runs = parseInt(document.getElementById('penalty-run-input').value); 
         if(runs > 0) matchState.innings[matchState.currentInnings].score += runs; 
@@ -3102,6 +3119,34 @@ function getTeamAbbreviation(teamName) {
         // Check if the user is already logged in when the page loads
         checkAuthState();
         // *** END: NEW AUTHENTICATION CHECK ***
+
+        // --- *** পরিবর্তিত কোড: মোবাইল ব্যাক বাটন এবং অ্যাপ ক্লোজ হ্যান্ডেল করার জন্য *** ---
+        window.addEventListener('popstate', function(event) {
+            const activeScreenId = navigationStack[navigationStack.length - 1];
+            
+            // কেইস ১: স্কোরকার্ড স্ক্রিনে ম্যাচ চলাকালীন ব্যাক বাটন চাপলে
+            if (activeScreenId === 'scorecard-screen' && matchState && matchState.id) {
+                history.pushState(null, "", "#" + activeScreenId); // পেছনে যাওয়া থেকে বিরত রাখুন
+                showConfirmationModal(
+                    "আপনার বর্তমান ম্যাচের ডেটা হারিয়ে যাবে। আপনি কি নিশ্চিত?",
+                    () => { // onConfirm (Yes)
+                        resetToNewMatch(); // ম্যাচ রিসেট করুন এবং নতুন ম্যাচ স্ক্রিনে যান
+                    }
+                );
+            } 
+            // কেইস ২: অ্যাপের প্রথম স্ক্রিন থেকে ব্যাক বাটন চাপলে (অ্যাপ বন্ধ করার চেষ্টা)
+            else if (navigationStack.length === 1) {
+                history.pushState(null, "", "#" + activeScreenId); // পেছনে যাওয়া থেকে বিরত রাখুন
+                showConfirmationModal(
+                    "Are you sure to exit?",
+                    () => { // onConfirm (Yes)
+                        // যেহেতু এটি একটি ওয়েব অ্যাপ, সরাসরি বন্ধ করা যায় না।
+                        // ব্যবহারকারীকে একটি বার্তা দেখানো যেতে পারে।
+                        document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-size:18px;">You can now close the tab.</div>';
+                    }
+                );
+            }
+        });
 
 
         document.getElementById('login-btn').addEventListener('click', handleLogin);
