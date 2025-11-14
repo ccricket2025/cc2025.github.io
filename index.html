@@ -926,9 +926,9 @@
     // --- FIREBASE SETUP ---
     const firebaseConfig = {
       apiKey: "AIzaSyCV2XwcArssrHcgeGSruUGmU524ceSLwRk",
-      authDomain: "cricketcc.firebaseapp.com",
-      projectId: "cricketcc",
-      storageBucket: "cricketcc.firebasestorage.app",
+      authDomain: "cricket.firebaseapp.com",
+      projectId: "cricket",
+      storageBucket: "cricket.firebasestorage.app",
       messagingSenderId: "1067596696661",
       appId: "1:1067596696661:web:e0b7943b002f075b7858dc"
     };
@@ -1750,15 +1750,36 @@
             history.pop(); // Remove current state
             const prevState = history[history.length - 1]; // Get the previous state
 
-            // এই deep copy অবজেক্ট রেফারেন্সগুলো ভেঙে দেয়
-            matchState = JSON.parse(JSON.stringify(prevState)); 
-            
-            // --- START: COMPLETE UNDO FIX ---
-            // আমাদের অবশ্যই উভয় ইনিংসের রেফারেন্স পুনরায় লিঙ্ক করতে হবে,
-            // কারণ JSON.parse সবগুলো সংযোগ ভেঙে দিয়েছে।
+            matchState = JSON.parse(JSON.stringify(prevState));
 
-            // Since matchState is a deep copy of prevState, all internal references are already correct.
-            // The complex relinking logic is not needed.
+            // --- START: COMPLETE UNDO REFERENCE FIX ---
+            // JSON.parse(JSON.stringify()) breaks all object references. We must restore them
+            // to ensure data consistency between the active players and the master list in the innings.
+            const ci = matchState.innings[matchState.currentInnings];
+
+            // 1. Re-link active batsmen to the master list in `allBatsmen`
+            if (ci && ci.allBatsmen) {
+                matchState.batsmen = matchState.batsmen.map(activeBatsman => {
+                    const masterBatsman = ci.allBatsmen.find(b => b.id === activeBatsman.id);
+                    return masterBatsman || activeBatsman; // Return the master reference
+                });
+            }
+
+            // 2. Re-link active bowlers to the master list in `allBowlers`
+            if (ci && ci.allBowlers) {
+                matchState.bowlers = matchState.bowlers.map(activeBowler => {
+                    const masterBowler = ci.allBowlers.find(b => b.id === activeBowler.id);
+                    return masterBowler || activeBowler; // Return the master reference
+                });
+            }
+
+            // 3. Re-link team objects (this was already partially implemented)
+            const battingTeamObj = appData.teams.find(t => t.id === (matchState.battingTeam === matchState.innings[1].team ? matchState.teamA_id : matchState.teamB_id));
+            const bowlingTeamObj = appData.teams.find(t => t.id === (matchState.bowlingTeam === matchState.innings[1].team ? matchState.teamA_id : matchState.teamB_id));
+            if (battingTeamObj) matchState.battingTeamObject = battingTeamObj;
+            if (bowlingTeamObj) matchState.bowlingTeamObject = bowlingTeamObj;
+            // --- END: COMPLETE UNDO REFERENCE FIX ---
+
             localStorage.setItem('inProgressMatch', JSON.stringify(matchState));
             renderScorecard();
             showToast("Undo Successful");
@@ -1790,13 +1811,13 @@
             if (extraType === 'nb') {
                 const extraSettings = matchState.settings.nb;
                 isLegalBall = !extraSettings.reball;
-                if (striker) {
-                    striker.runs += run;
-                }
                 const totalRuns = run + extraSettings.runs;
                 ci.score += totalRuns;
                 ci.extras.nb += extraSettings.runs;
                 ci.extras.total += extraSettings.runs;
+                if (striker && run > 0) { // ব্যাটসম্যানের রান যোগ করা হচ্ছে
+                    striker.runs += run;
+                }
                 if(cb) cb.runs += totalRuns;
                 matchState.thisOver.push(run + 'nb');
                 if (run % 2 !== 0) swapBatsmen();
@@ -1806,7 +1827,7 @@
                 const totalExtraRuns = run + extraSettings.runs;
                 ci.score += totalExtraRuns;
                 ci.extras.wd += totalExtraRuns;
-                ci.extras.total += totalExtraRuns;
+                ci.extras.total += totalExtraRuns; // ওয়াইডের সব রান এক্সট্রা হিসেবে যোগ হবে
                 if(cb) cb.runs += totalExtraRuns;
                 matchState.thisOver.push(run + 'wd');
                 if (run % 2 !== 0) swapBatsmen();
@@ -1908,15 +1929,14 @@
             ci.allBowlers.push(bowler);
         }
         
-        // --- START FIX ---
-        // matchState.bowlers = [bowler]; // <-- এই ভুল লাইনটি ডিলিট করুন
-        
-        // এই কোডটি যোগ করুন:
-        // চেক করুন বোলারটি ইতিমধ্যে "সক্রিয়" বোলার লিস্টে আছে কিনা
+        // --- START: BOWLER LIST FIX ---
+        // The previous logic `matchState.bowlers = [bowler]` was incorrect as it would
+        // wipe the list of all bowlers who have bowled in the innings.
+        // This ensures we only add the new bowler if they aren't already in the active list for this innings.
         if (!matchState.bowlers.find(b => b.id === bowler.id)) {
             matchState.bowlers.push(bowler); // না থাকলে যোগ করুন
         }
-        // --- END FIX ---
+        // --- END: BOWLER LIST FIX ---
 
         
         matchState.currentBowlerId = bowler.id;
@@ -2152,6 +2172,12 @@ function toggleRunOutRuns(wicketType) {
         // ২. রান এবং এক্সট্রা গণনা করুন (আপনার মূল অনুরোধ)
         if (extraType) {
             // এটি একটি এক্সট্রা বলের উপর উইকেট
+            // --- START: রান আউট রান ফিক্স ---
+            if (isRunOut && strikerOnBall && runsCompleted > 0) {
+                strikerOnBall.runs += runsCompleted;
+                matchState.currentPartnership.runs += runsCompleted;
+            }
+            // --- END: রান আউট রান ফিক্স ---
             if (extraType === 'nb') {
                 const extraSettings = matchState.settings.nb;
                 isLegalBall = !extraSettings.reball;
@@ -2265,11 +2291,12 @@ function toggleRunOutRuns(wicketType) {
             outBatsman.onStrike = false;
             outBatsman.dismissal = dismissalText; // আউট হওয়ার কারণ যোগ করা হলো
 
-            // --- *** ফিক্স: ব্যাটসম্যানের বল ফেস কাউন্ট *** ---
-            // শুধুমাত্র বৈধ বলে এবং ওয়াইড/নো-বল না হলে ব্যাটসম্যানের বল ফেস কাউন্ট হবে
+            // --- START: BATSMAN BALLS FACED FIX ON WICKET ---
+            // The ball faced by the batsman was not being incremented on a wicket ball.
             if (outBatsman && isLegalBall && extraType !== 'wd' && extraType !== 'nb') {
                  outBatsman.balls++;
             }
+            // --- END: BATSMAN BALLS FACED FIX ON WICKET ---
         }
 
         // ৬. এক্সট্রা মোড রিসেট করুন
@@ -2320,10 +2347,9 @@ function toggleRunOutRuns(wicketType) {
             newBatsman.retired = false; // তাকে আবার সক্রিয় করা হলো
             newBatsman.onStrike = true;
 
-            // --- *** START: BUG FIX *** ---
+            // --- START: BUG FIX ---
             // সক্রিয় ব্যাটসম্যানদের তালিকা থেকে তার পুরোনো (retired) রেফারেন্সটি সরিয়ে ফেলুন
             matchState.batsmen = matchState.batsmen.filter(b => b.id !== newBatsman.id);
-            // --- *** END: BUG FIX *** ---
 
             showToast(`${newName} has returned to bat.`);
         } else {
